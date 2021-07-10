@@ -1,12 +1,13 @@
 import hammerhead from '../deps/hammerhead';
 import testCafeCore from '../deps/testcafe-core';
 import ProgressBar from './progress-bar';
+import uiRoot from '../ui-root';
 
-var shadowUI      = hammerhead.shadowUI;
-var nativeMethods = hammerhead.nativeMethods;
+const shadowUI      = hammerhead.shadowUI;
+const nativeMethods = hammerhead.nativeMethods;
 
-var eventUtils = testCafeCore.eventUtils;
-var styleUtils = testCafeCore.styleUtils;
+const eventUtils = testCafeCore.eventUtils;
+const styleUtils = testCafeCore.styleUtils;
 
 
 const PANEL_CLASS   = 'progress-panel';
@@ -29,7 +30,7 @@ export default class ProgressPanel {
         this.animationInterval = null;
 
         this.panelDiv = document.createElement('div');
-        shadowUI.getRoot().appendChild(this.panelDiv);
+        uiRoot.element().appendChild(this.panelDiv);
 
         this.titleDiv = document.createElement('div');
         this.panelDiv.appendChild(this.titleDiv);
@@ -49,12 +50,12 @@ export default class ProgressPanel {
     }
 
     static _getInvisibleElementProperty (element, property) {
-        var needShowElement = styleUtils.get(element, 'display') === 'none';
+        const needShowElement = styleUtils.get(element, 'display') === 'none';
 
         if (needShowElement)
             styleUtils.set(element, 'display', 'block');
 
-        var value = element[property];
+        const value = element[property];
 
         if (needShowElement)
             styleUtils.set(element, 'display', 'none');
@@ -63,10 +64,10 @@ export default class ProgressPanel {
     }
 
     static _showAtWindowCenter (element) {
-        var elementHeight = ProgressPanel._getInvisibleElementProperty(element, 'offsetHeight');
-        var elementWidth  = ProgressPanel._getInvisibleElementProperty(element, 'offsetWidth');
-        var top           = Math.round(styleUtils.getHeight(window) / 2 - elementHeight / 2);
-        var left          = Math.round(styleUtils.getWidth(window) / 2 - elementWidth / 2);
+        const elementHeight = ProgressPanel._getInvisibleElementProperty(element, 'offsetHeight');
+        const elementWidth  = ProgressPanel._getInvisibleElementProperty(element, 'offsetWidth');
+        const top           = Math.round(styleUtils.getHeight(window) / 2 - elementHeight / 2);
+        const left          = Math.round(styleUtils.getWidth(window) / 2 - elementWidth / 2);
 
         styleUtils.set(element, {
             left: left + 'px',
@@ -75,7 +76,7 @@ export default class ProgressPanel {
     }
 
     _setCurrentProgress () {
-        var progress = Math.round((Date.now() - this.startTime) / this.maxTimeout * 100);
+        const progress = Math.round((nativeMethods.dateNow() - this.startTime) / this.maxTimeout * 100);
 
         this.progressBar.setValue(progress);
     }
@@ -89,11 +90,11 @@ export default class ProgressPanel {
     }
 
     _animate (el, duration, show, complete) {
-        var startTime         = Date.now();
-        var startOpacityValue = show ? 0 : 1;
-        var passedTime        = 0;
-        var progress          = 0;
-        var delta             = 0;
+        const startTime         = nativeMethods.dateNow();
+        const startOpacityValue = show ? 0 : 1;
+        let passedTime        = 0;
+        let progress          = 0;
+        let delta             = 0;
 
         if (show) {
             styleUtils.set(el, 'opacity', startOpacityValue);
@@ -103,7 +104,7 @@ export default class ProgressPanel {
         this._stopAnimation();
 
         this.animationInterval = nativeMethods.setInterval.call(window, () => {
-            passedTime = Date.now() - startTime;
+            passedTime = nativeMethods.dateNow() - startTime;
             progress   = Math.min(passedTime / duration, 1);
             delta      = 0.5 - Math.cos(progress * Math.PI) / 2;
 
@@ -132,10 +133,10 @@ export default class ProgressPanel {
     }
 
     show (text, timeout) {
-        this.startTime  = Date.now();
+        this.startTime  = nativeMethods.dateNow();
         this.maxTimeout = timeout;
 
-        this.titleDiv.textContent = text;
+        nativeMethods.nodeTextContentSetter.call(this.titleDiv, text);
         this._setSuccess(false);
 
         this.openingTimeout = nativeMethods.setTimeout.call(window, () => {
@@ -163,7 +164,7 @@ export default class ProgressPanel {
         }
 
         if (success) {
-            if (this.startTime && Date.now() - this.startTime < MIN_SHOWING_TIME) {
+            if (this.startTime && nativeMethods.dateNow() - this.startTime < MIN_SHOWING_TIME) {
                 nativeMethods.setTimeout.call(window, () => {
                     nativeMethods.setTimeout.call(window, () => this._hidePanel(false), SHOWING_DELAY);
                 }, UPDATE_INTERVAL);

@@ -15,15 +15,15 @@ import {
     ActionPositiveIntegerOptionError,
     ActionBooleanOptionError,
     ActionSpeedOptionError
-} from '../../errors/test-run';
+} from '../../shared/errors';
 
-export var integerOption         = createIntegerValidator(ActionIntegerOptionError);
-export var positiveIntegerOption = createPositiveIntegerValidator(ActionPositiveIntegerOptionError);
-export var booleanOption         = createBooleanValidator(ActionBooleanOptionError);
-export var speedOption           = createSpeedValidator(ActionSpeedOptionError);
+export const integerOption         = createIntegerValidator(ActionIntegerOptionError);
+export const positiveIntegerOption = createPositiveIntegerValidator(ActionPositiveIntegerOptionError);
+export const booleanOption         = createBooleanValidator(ActionBooleanOptionError);
+export const speedOption           = createSpeedValidator(ActionSpeedOptionError);
 
 
-// Acitons
+// Actions
 export class ActionOptions extends Assignable {
     constructor (obj, validate) {
         super();
@@ -59,6 +59,59 @@ export class OffsetOptions extends ActionOptions {
     }
 }
 
+export class ScrollOptions extends OffsetOptions {
+    constructor (obj, validate) {
+        super();
+
+        this.scrollToCenter   = false;
+        this.skipParentFrames = false;
+
+        this._assignFrom(obj, validate);
+    }
+
+    _getAssignableProperties () {
+        return super._getAssignableProperties().concat([
+            { name: 'scrollToCenter', type: booleanOption },
+            { name: 'skipParentFrames', type: booleanOption }
+        ]);
+    }
+}
+
+// Element Screenshot
+export class ElementScreenshotOptions extends ActionOptions {
+    constructor (obj, validate) {
+        super();
+
+        this.scrollTargetX   = null;
+        this.scrollTargetY   = null;
+        this.includeMargins  = false;
+        this.includeBorders  = true;
+        this.includePaddings = true;
+
+        this.crop = {
+            left:   null,
+            right:  null,
+            top:    null,
+            bottom: null
+        };
+
+        this._assignFrom(obj, validate);
+    }
+
+    _getAssignableProperties () {
+        return super._getAssignableProperties().concat([
+            { name: 'scrollTargetX', type: integerOption },
+            { name: 'scrollTargetY', type: integerOption },
+            { name: 'crop.left', type: integerOption },
+            { name: 'crop.right', type: integerOption },
+            { name: 'crop.top', type: integerOption },
+            { name: 'crop.bottom', type: integerOption },
+            { name: 'includeMargins', type: booleanOption },
+            { name: 'includeBorders', type: booleanOption },
+            { name: 'includePaddings', type: booleanOption }
+        ]);
+    }
+}
 
 // Mouse
 export class MouseOptions extends OffsetOptions {
@@ -108,10 +161,11 @@ export class MoveOptions extends MouseOptions {
     constructor (obj, validate) {
         super();
 
-        this.speed          = null;
-        this.minMovingTime  = null;
-        this.holdLeftButton = false;
-        this.skipScrolling  = false;
+        this.speed                   = null;
+        this.minMovingTime           = null;
+        this.holdLeftButton          = false;
+        this.skipScrolling           = false;
+        this.skipDefaultDragBehavior = false;
 
         this._assignFrom(obj, validate);
     }
@@ -121,7 +175,8 @@ export class MoveOptions extends MouseOptions {
             { name: 'speed' },
             { name: 'minMovingTime' },
             { name: 'holdLeftButton' },
-            { name: 'skipScrolling', type: booleanOption }
+            { name: 'skipScrolling', type: booleanOption },
+            { name: 'skipDefaultDragBehavior', type: booleanOption }
         ]);
     }
 }
@@ -131,8 +186,9 @@ export class TypeOptions extends ClickOptions {
     constructor (obj, validate) {
         super();
 
-        this.replace = false;
-        this.paste   = false;
+        this.replace      = false;
+        this.paste        = false;
+        this.confidential = void 0;
 
         this._assignFrom(obj, validate);
     }
@@ -140,7 +196,8 @@ export class TypeOptions extends ClickOptions {
     _getAssignableProperties () {
         return super._getAssignableProperties().concat([
             { name: 'replace', type: booleanOption },
-            { name: 'paste', type: booleanOption }
+            { name: 'paste', type: booleanOption },
+            { name: 'confidential', type: booleanOption }
         ]);
     }
 }
@@ -186,14 +243,33 @@ export class AssertionOptions extends Assignable {
     constructor (obj, validate) {
         super();
 
-        this.timeout = null;
+        this.timeout               = void 0;
+        this.allowUnawaitedPromise = false;
 
         this._assignFrom(obj, validate);
     }
 
     _getAssignableProperties () {
         return [
-            { name: 'timeout', type: positiveIntegerOption }
+            { name: 'timeout', type: positiveIntegerOption },
+            { name: 'allowUnawaitedPromise', type: booleanOption }
         ];
+    }
+}
+
+// Press
+export class PressOptions extends ActionOptions {
+    constructor (obj, validate) {
+        super();
+
+        this.confidential = void 0;
+
+        this._assignFrom(obj, validate);
+    }
+
+    _getAssignableProperties () {
+        return super._getAssignableProperties().concat([
+            { name: 'confidential', type: booleanOption }
+        ]);
     }
 }

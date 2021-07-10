@@ -1,252 +1,389 @@
-import dedent from 'dedent';
 import { escape as escapeHtml } from 'lodash';
-import TYPE from './type';
-import TEST_RUN_PHASE from '../../test-run/phase';
+import { TEST_RUN_ERRORS } from '../types';
+import {
+    renderForbiddenCharsList,
+    renderDiff,
+    formatSelectorCallstack,
+    formatUrl,
+    replaceLeadingSpacesWithNbsp,
+    formatExpressionMessage
+} from './utils';
 
-const SUBTITLES = {
-    [TEST_RUN_PHASE.initial]:                 '',
-    [TEST_RUN_PHASE.inFixtureBeforeHook]:     '<span class="subtitle">Error in fixture.before hook</span>\n',
-    [TEST_RUN_PHASE.inFixtureBeforeEachHook]: '<span class="subtitle">Error in fixture.beforeEach hook</span>\n',
-    [TEST_RUN_PHASE.inTestBeforeHook]:        '<span class="subtitle">Error in test.before hook</span>\n',
-    [TEST_RUN_PHASE.inTest]:                  '',
-    [TEST_RUN_PHASE.inTestAfterHook]:         '<span class="subtitle">Error in test.after hook</span>\n',
-    [TEST_RUN_PHASE.inFixtureAfterEachHook]:  '<span class="subtitle">Error in fixture.afterEach hook</span>\n',
-    [TEST_RUN_PHASE.inFixtureAfterHook]:      '<span class="subtitle">Error in fixture.after hook</span>\n',
-    [TEST_RUN_PHASE.inRoleInitializer]:       '<span class="subtitle">Error in Role initializer</span>\n',
-    [TEST_RUN_PHASE.inBookmarkRestore]:       '<span class="subtitle">Error while restoring configuration after Role switch</span>\n'
+const EXTERNAL_LINKS = {
+    createNewIssue:      'https://github.com/DevExpress/testcafe/issues/new?template=bug-report.md',
+    troubleshootNetwork: 'https://go.devexpress.com/TestCafe_FAQ_ARequestHasFailed.aspx',
+    viewportSizes:       'https://github.com/DevExpress/device-specs/blob/master/viewport-sizes.json'
 };
 
-function markup (err, msgMarkup, opts = {}) {
-    msgMarkup = dedent(`
-        ${SUBTITLES[err.testRunPhase]}<div class="message">${dedent(msgMarkup)}</div>
-
-        <strong>Browser:</strong> <span class="user-agent">${err.userAgent}</span>
-    `);
-
-    if (err.screenshotPath)
-        msgMarkup += `\n<div class="screenshot-info"><strong>Screenshot:</strong> <a class="screenshot-path">${escapeHtml(err.screenshotPath)}</a></div>`;
-
-    if (!opts.withoutCallsite) {
-        var callsiteMarkup = err.getCallsiteMarkup();
-
-        if (callsiteMarkup)
-            msgMarkup += `\n\n${callsiteMarkup}`;
-    }
-
-    return msgMarkup;
-}
-
 export default {
-    [TYPE.actionIntegerOptionError]: err => markup(err, `
+    [TEST_RUN_ERRORS.actionIntegerOptionError]: err => `
         The "${err.optionName}" option is expected to be an integer, but it was ${err.actualValue}.
-    `),
+    `,
 
-    [TYPE.actionPositiveIntegerOptionError]: err => markup(err, `
+    [TEST_RUN_ERRORS.actionPositiveIntegerOptionError]: err => `
         The "${err.optionName}" option is expected to be a positive integer, but it was ${err.actualValue}.
-    `),
+    `,
 
-    [TYPE.actionBooleanOptionError]: err => markup(err, `
+    [TEST_RUN_ERRORS.actionBooleanOptionError]: err => `
         The "${err.optionName}" option is expected to be a boolean value, but it was ${err.actualValue}.
-    `),
+    `,
 
-    [TYPE.actionSpeedOptionError]: err => markup(err, `
+    [TEST_RUN_ERRORS.actionSpeedOptionError]: err => `
         The "${err.optionName}" option is expected to be a number between 0.01 and 1, but it was ${err.actualValue}.
-    `),
+    `,
 
-    [TYPE.pageLoadError]: err => markup(err, `
+    [TEST_RUN_ERRORS.pageLoadError]: err => `
+        Failed to load the page at ${formatUrl(err.url)}.
+        Increase the value of the "pageRequestTimeout" variable, enable the "retryTestPages" option, or use quarantine mode to perform additional attempts to execute this test.
+        You can find troubleshooting information for this issue at ${formatUrl(EXTERNAL_LINKS.troubleshootNetwork)}.
+
+        Error details:
         ${err.errMsg}
-    `),
+    `,
 
-    [TYPE.uncaughtErrorOnPage]: err => markup(err, `
-        Error on page <a href="${err.pageDestUrl}">${err.pageDestUrl}</a>:
+    [TEST_RUN_ERRORS.uncaughtErrorOnPage]: err => `
+        A JavaScript error occurred on ${formatUrl(err.pageDestUrl)}.
+        Repeat test actions in the browser and check the console for errors.
+        To ignore client-side JavaScript errors, enable the "--skip-js-errors" CLI option, or set the "skipJsErrors" configuration file property to "true".
+        If the website only throws this error when you test it with TestCafe, please create a new issue at:
+        ${formatUrl(EXTERNAL_LINKS.createNewIssue)}.
+
+        JavaScript error details:
+        ${replaceLeadingSpacesWithNbsp(escapeHtml(err.errStack))}
+    `,
+
+    [TEST_RUN_ERRORS.uncaughtErrorInTestCode]: err => `
+        ${escapeHtml(err.errMsg)}
+    `,
+
+    [TEST_RUN_ERRORS.nativeDialogNotHandledError]: err => `
+        A native ${err.dialogType} dialog was invoked on page ${formatUrl(err.pageUrl)}, but no handler was set for it. Use the "setNativeDialogHandler" function to introduce a handler function for native dialogs.
+    `,
+
+    [TEST_RUN_ERRORS.uncaughtErrorInNativeDialogHandler]: err => `
+        An error occurred in the native dialog handler called for a native ${err.dialogType} dialog on page ${formatUrl(err.pageUrl)}:
 
         ${escapeHtml(err.errMsg)}
-    `),
+    `,
 
-    [TYPE.uncaughtErrorInTestCode]: err => markup(err, `
-        ${escapeHtml(err.errMsg)}
-    `),
-
-    [TYPE.nativeDialogNotHandledError]: err => markup(err, `
-        A native ${err.dialogType} dialog was invoked on page <a href="${err.pageUrl}">${err.pageUrl}</a>, but no handler was set for it. Use the "setNativeDialogHandler" function to introduce a handler function for native dialogs.
-    `),
-
-    [TYPE.uncaughtErrorInNativeDialogHandler]: err => markup(err, `
-        An error occurred in the native dialog handler called for a native ${err.dialogType} dialog on page <a href="${err.pageUrl}">${err.pageUrl}</a>:
-
-        ${escapeHtml(err.errMsg)}
-    `),
-
-    [TYPE.setTestSpeedArgumentError]: err => markup(err, `
+    [TEST_RUN_ERRORS.setTestSpeedArgumentError]: err => `
         Speed is expected to be a number between 0.01 and 1, but ${err.actualValue} was passed.
-    `),
+    `,
 
-    [TYPE.setNativeDialogHandlerCodeWrongTypeError]: err => markup(err, `
+    [TEST_RUN_ERRORS.setNativeDialogHandlerCodeWrongTypeError]: err => `
         The native dialog handler is expected to be a function, ClientFunction or null, but it was ${err.actualType}.
-    `),
+    `,
 
-    [TYPE.uncaughtErrorInClientFunctionCode]: err => markup(err, `
+    [TEST_RUN_ERRORS.uncaughtErrorInClientFunctionCode]: err => `
         An error occurred in ${err.instantiationCallsiteName} code:
 
         ${escapeHtml(err.errMsg)}
-    `),
+    `,
 
-    [TYPE.uncaughtErrorInCustomDOMPropertyCode]: err => markup(err, `
+    [TEST_RUN_ERRORS.uncaughtErrorInCustomDOMPropertyCode]: err => `
         An error occurred when trying to calculate a custom Selector property "${err.property}":
 
         ${escapeHtml(err.errMsg)}
-    `),
+    `,
 
-    [TYPE.clientFunctionExecutionInterruptionError]: err => markup(err, `
+    [TEST_RUN_ERRORS.clientFunctionExecutionInterruptionError]: err => `
         ${err.instantiationCallsiteName} execution was interrupted by page unload. This problem may appear if you trigger page navigation from ${err.instantiationCallsiteName} code.
-    `),
+    `,
 
-    [TYPE.uncaughtNonErrorObjectInTestCode]: err => markup(err, `
+    [TEST_RUN_ERRORS.uncaughtNonErrorObjectInTestCode]: err => `
         Uncaught ${err.objType} "${escapeHtml(err.objStr)}" was thrown. Throw Error instead.
-    `, { withoutCallsite: true }),
+    `,
 
-    [TYPE.actionOptionsTypeError]: err => markup(err, `
-        Action options is expected to be an object, null or undefined but it was ${err.actualType}.
-    `),
+    [TEST_RUN_ERRORS.unhandledPromiseRejection]: err => `
+        Unhandled promise rejection:
 
-    [TYPE.actionStringArgumentError]: err => markup(err, `
-        The "${err.argumentName}" argument is expected to be a non-empty string, but it was ${err.actualValue}.
-    `),
-
-    [TYPE.actionStringOrStringArrayArgumentError]: err => markup(err, `
-        The "${err.argumentName}" argument is expected to be a non-empty string or a string array, but it was ${err.actualValue}.
-    `),
-
-    [TYPE.actionStringArrayElementError]: err => markup(err, `
-        Elements of the "${err.argumentName}" argument are expected to be non-empty strings, but the element at index ${err.elementIndex} was ${err.actualValue}.
-    `),
-
-    [TYPE.actionIntegerArgumentError]: err => markup(err, `
-        The "${err.argumentName}" argument is expected to be an integer, but it was ${err.actualValue}.
-    `),
-
-    [TYPE.actionRoleArgumentError]: err => markup(err, `
-        The "${err.argumentName}" argument is expected to be a Role instance, but it was ${err.actualValue}.
-    `),
-
-    [TYPE.actionPositiveIntegerArgumentError]: err => markup(err, `
-        The "${err.argumentName}" argument is expected to be a positive integer, but it was ${err.actualValue}.
-    `),
-
-    [TYPE.actionElementNotFoundError]: err => markup(err, `
-        The specified selector does not match any element in the DOM tree.
-    `),
-
-    [TYPE.actionElementIsInvisibleError]: err => markup(err, `
-        The element that matches the specified selector is not visible.
-    `),
-
-    [TYPE.actionSelectorMatchesWrongNodeTypeError]: err => markup(err, `
-        The specified selector is expected to match a DOM element, but it matches a ${err.nodeDescription} node.
-    `),
-
-    [TYPE.actionAdditionalElementNotFoundError]: err => markup(err, `
-        The specified "${err.argumentName}" does not match any element in the DOM tree.
-    `),
-
-    [TYPE.actionAdditionalElementIsInvisibleError]: err => markup(err, `
-        The element that matches the specified "${err.argumentName}" is not visible.
-    `),
-
-    [TYPE.actionAdditionalSelectorMatchesWrongNodeTypeError]: err => markup(err, `
-        The specified "${err.argumentName}" is expected to match a DOM element, but it matches a ${err.nodeDescription} node.
-    `),
-
-    [TYPE.actionElementNonEditableError]: err => markup(err, `
-        The action element is expected to be editable (an input, textarea or element with the contentEditable attribute).
-    `),
-
-    [TYPE.actionElementNonContentEditableError]: err => markup(err, `
-        The element that matches the specified "${err.argumentName}" is expected to have the contentEditable attribute enabled or the entire document should be in design mode.
-    `),
-
-    [TYPE.actionRootContainerNotFoundError]: err => markup(err, `
-        Content between the action elements cannot be selected because the root container for the selection range cannot be found, i.e. these elements do not have a common ancestor with the contentEditable attribute.
-    `),
-
-    [TYPE.actionElementIsNotFileInputError]: err => markup(err, `
-        The specified selector does not match a file input element.
-    `),
-
-    [TYPE.actionCanNotFindFileToUploadError]: err => markup(err, `
-        Cannot find the following file(s) to upload:
-        ${err.filePaths.map(path => `  ${escapeHtml(path)}`).join('\n')}
-    `),
-
-    [TYPE.actionElementNotTextAreaError]: err => markup(err, `
-        The action element is expected to be a &lt;textarea&gt;.
-    `),
-
-    [TYPE.actionElementNotIframeError]: err => markup(err, `
-        The action element is expected to be an &lt;iframe&gt.
-    `),
-
-    [TYPE.actionIncorrectKeysError]: err => markup(err, `
-        The "${err.argumentName}" argument contains an incorrect key or key combination.
-    `),
-
-    [TYPE.actionUnsupportedDeviceTypeError]: err => markup(err, `
-        The "${err.argumentName}" argument specifies an unsupported "${err.actualValue}" device. For a list of supported devices, refer to <a href="http://viewportsizes.com">http://viewportsizes.com</a>.
-    `),
-
-    [TYPE.actionIframeIsNotLoadedError]: err => markup(err, `
-        Content of the iframe to which you are switching did not load.
-    `),
-
-    [TYPE.currentIframeIsNotLoadedError]: err => markup(err, `
-        Content of the iframe in which the test is currently operating did not load.
-    `),
-
-    [TYPE.currentIframeNotFoundError]: err => markup(err, `
-        The iframe in which the test is currently operating does not exist anymore.
-    `),
-
-    [TYPE.currentIframeIsInvisibleError]: err => markup(err, `
-        The iframe in which the test is currently operating is not visible anymore.
-    `),
-
-    [TYPE.missingAwaitError]: err => markup(err, `
-        A call to an async function is not awaited. Use the "await" keyword before actions, assertions or chains of them to ensure that they run in the right sequence.
-    `),
-
-    [TYPE.externalAssertionLibraryError]: err => markup(err, `
         ${escapeHtml(err.errMsg)}
-    `),
+    `,
 
-    [TYPE.domNodeClientFunctionResultError]: err => markup(err, `
+    [TEST_RUN_ERRORS.uncaughtException]: err => `
+        Uncaught exception:
+
+        ${escapeHtml(err.errMsg)}
+    `,
+
+    [TEST_RUN_ERRORS.actionOptionsTypeError]: err => `
+        Action options is expected to be an object, null or undefined but it was ${err.actualType}.
+    `,
+
+    [TEST_RUN_ERRORS.actionStringArgumentError]: err => `
+        The "${err.argumentName}" argument is expected to be a non-empty string, but it was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionBooleanArgumentError]: err => `
+        The "${err.argumentName}" argument is expected to be a boolean value, but it was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionNullableStringArgumentError]: err => `
+        The "${err.argumentName}" argument is expected to be a null or a string, but it was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionStringOrStringArrayArgumentError]: err => `
+        The "${err.argumentName}" argument is expected to be a non-empty string or a string array, but it was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionStringArrayElementError]: err => `
+        Elements of the "${err.argumentName}" argument are expected to be non-empty strings, but the element at index ${err.elementIndex} was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionIntegerArgumentError]: err => `
+        The "${err.argumentName}" argument is expected to be an integer, but it was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionRoleArgumentError]: err => `
+        The "${err.argumentName}" argument is expected to be a Role instance, but it was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionFunctionArgumentError]: err => `
+        The "${err.argumentName}" argument is expected to be a function, but it was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionPositiveIntegerArgumentError]: err => `
+        The "${err.argumentName}" argument is expected to be a positive integer, but it was ${err.actualValue}.
+    `,
+
+    [TEST_RUN_ERRORS.actionElementNotFoundError]: (err, viewportWidth) => `
+        The specified selector does not match any element in the DOM tree.
+
+        ${formatSelectorCallstack(err.apiFnChain, err.apiFnIndex, viewportWidth)}
+    `,
+
+    [TEST_RUN_ERRORS.actionElementIsInvisibleError]: () => `
+        The element that matches the specified selector is not visible.
+    `,
+
+    [TEST_RUN_ERRORS.actionSelectorMatchesWrongNodeTypeError]: err => `
+        The specified selector is expected to match a DOM element, but it matches a ${err.nodeDescription} node.
+    `,
+
+    [TEST_RUN_ERRORS.actionAdditionalElementNotFoundError]: (err, viewportWidth) => `
+        The specified "${err.argumentName}" does not match any element in the DOM tree.
+
+        ${formatSelectorCallstack(err.apiFnChain, err.apiFnIndex, viewportWidth)}
+    `,
+
+    [TEST_RUN_ERRORS.actionAdditionalElementIsInvisibleError]: err => `
+        The element that matches the specified "${err.argumentName}" is not visible.
+    `,
+
+    [TEST_RUN_ERRORS.actionAdditionalSelectorMatchesWrongNodeTypeError]: err => `
+        The specified "${err.argumentName}" is expected to match a DOM element, but it matches a ${err.nodeDescription} node.
+    `,
+
+    [TEST_RUN_ERRORS.actionElementNonEditableError]: () => `
+        The action element is expected to be editable (an input, textarea or element with the contentEditable attribute).
+    `,
+
+    [TEST_RUN_ERRORS.actionElementNonContentEditableError]: err => `
+        The element that matches the specified "${err.argumentName}" is expected to have the contentEditable attribute enabled or the entire document should be in design mode.
+    `,
+
+    [TEST_RUN_ERRORS.actionRootContainerNotFoundError]: () => `
+        Content between the action elements cannot be selected because the root container for the selection range cannot be found, i.e. these elements do not have a common ancestor with the contentEditable attribute.
+    `,
+
+    [TEST_RUN_ERRORS.actionElementIsNotFileInputError]: () => `
+        The specified selector does not match a file input element.
+    `,
+
+    [TEST_RUN_ERRORS.actionCannotFindFileToUploadError]: err => `
+        Cannot find the following file(s) to upload:
+        ${err.filePaths.map(path => escapeHtml(path)).join('\n')}
+
+        The following locations were scanned for the missing upload files:
+        ${err.scannedFilePaths.map(path => escapeHtml(path)).join('\n')}
+
+        Ensure these files exist or change the working directory.
+    `,
+
+    [TEST_RUN_ERRORS.actionElementNotTextAreaError]: () => `
+        The action element is expected to be a &lt;textarea&gt;.
+    `,
+
+    [TEST_RUN_ERRORS.actionElementNotIframeError]: () => `
+        The action element is expected to be an &lt;iframe&gt.
+    `,
+
+    [TEST_RUN_ERRORS.actionIncorrectKeysError]: err => `
+        The "${err.argumentName}" argument contains an incorrect key or key combination.
+    `,
+
+    [TEST_RUN_ERRORS.actionUnsupportedDeviceTypeError]: err => `
+        The "${err.argumentName}" argument specifies an unsupported "${err.actualValue}" device. For a list of supported devices, refer to ${formatUrl(EXTERNAL_LINKS.viewportSizes)}.
+    `,
+
+    [TEST_RUN_ERRORS.actionInvalidScrollTargetError]: err => `
+        Unable to scroll to the specified point because a point with the specified ${err.properties} is not located inside the element's cropping region.
+    `,
+
+    [TEST_RUN_ERRORS.actionIframeIsNotLoadedError]: () => `
+        Content of the iframe to which you are switching did not load.
+    `,
+
+    [TEST_RUN_ERRORS.currentIframeIsNotLoadedError]: () => `
+        Content of the iframe in which the test is currently operating did not load.
+    `,
+
+    [TEST_RUN_ERRORS.currentIframeNotFoundError]: () => `
+        The iframe in which the test is currently operating does not exist anymore.
+    `,
+
+    [TEST_RUN_ERRORS.currentIframeIsInvisibleError]: () => `
+        The iframe in which the test is currently operating is not visible anymore.
+    `,
+
+    [TEST_RUN_ERRORS.missingAwaitError]: () => `
+        A call to an async function is not awaited. Use the "await" keyword before actions, assertions or chains of them to ensure that they run in the right sequence.
+    `,
+
+    [TEST_RUN_ERRORS.externalAssertionLibraryError]: err => `
+        ${escapeHtml(err.errMsg)}
+
+        ${renderDiff(err.diff)}
+    `,
+
+    [TEST_RUN_ERRORS.domNodeClientFunctionResultError]: err => `
        ${err.instantiationCallsiteName} cannot return DOM elements. Use Selector functions for this purpose.
-    `),
+    `,
 
-    [TYPE.invalidSelectorResultError]: err => markup(err, `
+    [TEST_RUN_ERRORS.invalidSelectorResultError]: () => `
         Function that specifies a selector can only return a DOM node, an array of nodes, NodeList, HTMLCollection, null or undefined. Use ClientFunction to return other values.
-    `),
+    `,
 
-    [TYPE.actionSelectorError]: err => markup(err, `
+    [TEST_RUN_ERRORS.actionSelectorError]: err => `
         Action "${err.selectorName}" argument error:
 
         ${escapeHtml(err.errMsg)}
-    `),
+    `,
 
-    [TYPE.cantObtainInfoForElementSpecifiedBySelectorError]: err => markup(err, `
+    [TEST_RUN_ERRORS.cannotObtainInfoForElementSpecifiedBySelectorError]: (err, viewportWidth) => `
         Cannot obtain information about the node because the specified selector does not match any node in the DOM tree.
-    `),
 
-    [TYPE.windowDimensionsOverflowError]: err => markup(err, `
+        ${formatSelectorCallstack(err.apiFnChain, err.apiFnIndex, viewportWidth)}
+    `,
+
+    [TEST_RUN_ERRORS.windowDimensionsOverflowError]: () => `
         Unable to resize the window because the specified size exceeds the screen size. On macOS, a window cannot be larger than the screen.
-    `),
+    `,
 
-    [TYPE.roleSwitchInRoleInitializerError]: err => markup(err, `
+    [TEST_RUN_ERRORS.forbiddenCharactersInScreenshotPathError]: err => `
+        There are forbidden characters in the "${err.screenshotPath}" screenshot path:
+        ${renderForbiddenCharsList(err.forbiddenCharsList)}
+    `,
+
+    [TEST_RUN_ERRORS.invalidElementScreenshotDimensionsError]: err => `
+         Unable to capture an element image because the resulting image ${err.dimensions} ${err.verb} zero or negative.
+    `,
+
+    [TEST_RUN_ERRORS.roleSwitchInRoleInitializerError]: () => `
         Role cannot be switched while another role is being initialized.
-    `),
+    `,
 
-    [TYPE.assertionExecutableArgumentError]: err => markup(err, `
+    [TEST_RUN_ERRORS.assertionExecutableArgumentError]: err => `
         Cannot evaluate the "${err.actualValue}" expression in the "${err.argumentName}" parameter because of the following error:
 
         ${err.errMsg}
-    `)
+    `,
+
+    [TEST_RUN_ERRORS.assertionWithoutMethodCallError]: () => `
+        An assertion method is not specified.
+    `,
+
+    [TEST_RUN_ERRORS.assertionUnawaitedPromiseError]: () => `
+        Attempted to run assertions on a Promise object. Did you forget to await it? If not, pass "{ allowUnawaitedPromise: true }" to the assertion options.
+    `,
+
+    [TEST_RUN_ERRORS.requestHookNotImplementedError]: err => `
+        You should implement the "${err.methodName}" method in the "${err.hookClassName}" class.
+    `,
+
+    [TEST_RUN_ERRORS.requestHookUnhandledError]: err => `
+        An unhandled error occurred in the "${err.methodName}" method of the "${err.hookClassName}" class:
+
+        ${escapeHtml(err.errMsg)}
+    `,
+
+    [TEST_RUN_ERRORS.uncaughtErrorInCustomClientScriptCode]: err => `
+        An error occurred in a script injected into the tested page:
+
+        ${escapeHtml(err.errMsg)}
+    `,
+
+    [TEST_RUN_ERRORS.uncaughtErrorInCustomClientScriptCodeLoadedFromModule]: err => `
+        An error occurred in the '${err.moduleName}' module injected into the tested page. Make sure that this module can be executed in the browser environment.
+
+        Error details:
+        ${escapeHtml(err.errMsg)}
+    `,
+
+    [TEST_RUN_ERRORS.uncaughtErrorInCustomScript]: err => `
+        An unhandled error occurred in the custom script:
+
+        Error details: ${escapeHtml(err.errMsg)}
+
+        ${formatExpressionMessage(err.expression, err.line, err.column)}
+    `,
+
+    [TEST_RUN_ERRORS.childWindowIsNotLoadedError]: () => `
+        The page in the child window is not loaded.
+    `,
+
+    [TEST_RUN_ERRORS.childWindowNotFoundError]: () => `
+        The child window is not found.
+    `,
+
+    [TEST_RUN_ERRORS.cannotSwitchToWindowError]: () => `
+        Cannot switch to the window.
+    `,
+
+    [TEST_RUN_ERRORS.closeChildWindowError]: () => `
+        An error occurred while closing child windows.
+    `,
+
+    [TEST_RUN_ERRORS.childWindowClosedBeforeSwitchingError]: () => `
+        The child window was closed before TestCafe could switch to it.
+    `,
+
+    [TEST_RUN_ERRORS.cannotCloseWindowWithChildrenError]: () => `
+        Cannot close a window that has an open child window.
+    `,
+
+    [TEST_RUN_ERRORS.targetWindowNotFoundError]: () => `
+        Cannot find the window specified in the action parameters.
+    `,
+
+    [TEST_RUN_ERRORS.parentWindowNotFoundError]: () => `
+        Cannot find the parent window. Make sure that the tested window was opened from another window.
+    `,
+
+    [TEST_RUN_ERRORS.previousWindowNotFoundError]: () => `
+        Cannot find the previous window. Make sure that the previous window is opened.
+    `,
+
+    [TEST_RUN_ERRORS.switchToWindowPredicateError]: err => `
+        An error occurred inside the "switchToWindow" argument function.
+
+        Error details:
+        ${escapeHtml(err.errMsg)}
+    `,
+
+    [TEST_RUN_ERRORS.multipleWindowsModeIsDisabledError]: err => `
+        Multi-window mode is disabled. To use the "${err.methodName}" method, remove the "disableMultipleWindows" option.
+    `,
+
+    [TEST_RUN_ERRORS.multipleWindowsModeIsNotSupportedInRemoteBrowserError]: err => `
+        Multi-window mode is supported in Chrome, Chromium, Edge 84+ and Firefox only. Run tests in these browsers to use the "${err.methodName}" method.
+    `,
+
+    [TEST_RUN_ERRORS.cannotCloseWindowWithoutParent]: () => `
+        Cannot close the window because it does not have a parent. The parent window was closed or you are attempting to close the root browser window where tests were launched.
+    `,
+
+    [TEST_RUN_ERRORS.cannotRestoreChildWindowError]: () => `
+        Failed to restore connection to window within the allocated timeout.
+    `,
 };

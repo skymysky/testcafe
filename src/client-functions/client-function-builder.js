@@ -6,10 +6,11 @@ import { ExecuteClientFunctionCommand } from '../test-run/commands/observation';
 import compileClientFunction from '../compiler/compile-client-function';
 import { APIError, ClientFunctionAPIError } from '../errors/runtime';
 import { assertType, is } from '../errors/runtime/type-assertions';
-import MESSAGE from '../errors/runtime/message';
+import { RUNTIME_ERRORS } from '../errors/types';
 import { getCallsiteForMethod } from '../errors/get-callsite';
-import ClientFunctionResultPromise from './result-promise';
+import ReExecutablePromise from '../utils/re-executable-promise';
 import testRunMarker from '../test-run/marker-symbol';
+import selectorApiExecutionMode from './selector-api-execution-mode';
 
 const DEFAULT_EXECUTION_CALLSITE_NAME = '__$$clientFunction$$';
 
@@ -39,16 +40,20 @@ export default class ClientFunctionBuilder {
         clientFn[functionBuilderSymbol] = this;
 
         clientFn.with = options => {
-            if (typeof options === 'object')
-                options = assign({}, this.options, options);
-
-            var builder = new this.constructor(this.fn, options, {
-                instantiation: 'with',
-                execution:     this.callsiteNames.execution
-            });
-
-            return builder.getFunction();
+            return this._getClientFnWithOverriddenOptions(options);
         };
+    }
+
+    _getClientFnWithOverriddenOptions (options) {
+        if (typeof options === 'object')
+            options = assign({}, this.options, options);
+
+        const builder = new this.constructor(this.fn, options, {
+            instantiation: 'with',
+            execution:     this.callsiteNames.execution
+        });
+
+        return builder.getFunction();
     }
 
     getBoundTestRun () {
@@ -59,17 +64,28 @@ export default class ClientFunctionBuilder {
         return null;
     }
 
-    getFunction () {
-        var builder = this;
+    _getTestRun () {
+        return this.getBoundTestRun() || testRunTracker.resolveContextTestRun();
+    }
 
-        var clientFn = function __$$clientFunction$$ () {
-            var testRun  = builder.getBoundTestRun() || testRunTracker.resolveContextTestRun();
-            var callsite = getCallsiteForMethod(builder.callsiteNames.execution);
-            var args     = [];
+    _getObservedCallsites () {
+        return this._getTestRun()?.observedCallsites || null;
+    }
+
+    getFunction () {
+        const builder = this;
+
+        const clientFn = function __$$clientFunction$$ () {
+            const testRun  = builder._getTestRun();
+            const callsite = getCallsiteForMethod(builder.callsiteNames.execution);
+            const args     = [];
 
             // OPTIMIZATION: don't leak `arguments` object.
-            for (var i = 0; i < arguments.length; i++)
+            for (let i = 0; i < arguments.length; i++)
                 args.push(arguments[i]);
+
+            if (selectorApiExecutionMode.isSync)
+                return builder._executeCommandSync(args, testRun, callsite);
 
             return builder._executeCommand(args, testRun, callsite);
         };
@@ -80,8 +96,8 @@ export default class ClientFunctionBuilder {
     }
 
     getCommand (args) {
-        var encodedArgs         = this.replicator.encode(args);
-        var encodedDependencies = this.replicator.encode(this.getFunctionDependencies());
+        const encodedArgs         = this.replicator.encode(args);
+        const encodedDependencies = this.replicator.encode(this.getFunctionDependencies());
 
         return this._createTestRunCommand(encodedArgs, encodedDependencies);
     }
@@ -98,7 +114,7 @@ export default class ClientFunctionBuilder {
             fnCode:                    this.compiledFnCode,
             args:                      encodedArgs,
             dependencies:              encodedDependencies
-        });
+        }, this._getTestRun());
     }
 
     _getCompiledFnCode () {
@@ -109,17 +125,17 @@ export default class ClientFunctionBuilder {
     }
 
     _createInvalidFnTypeError () {
-        return new ClientFunctionAPIError(this.callsiteNames.instantiation, this.callsiteNames.instantiation, MESSAGE.clientFunctionCodeIsNotAFunction, typeof this.fn);
+        return new ClientFunctionAPIError(this.callsiteNames.instantiation, this.callsiteNames.instantiation, RUNTIME_ERRORS.clientFunctionCodeIsNotAFunction, typeof this.fn);
     }
 
     _executeCommand (args, testRun, callsite) {
         // NOTE: should be kept outside of lazy promise to preserve
         // correct callsite in case of replicator error.
-        var command = this.getCommand(args);
+        const command = this.getCommand(args);
 
-        return ClientFunctionResultPromise.fromFn(async () => {
+        return ReExecutablePromise.fromFn(async () => {
             if (!testRun) {
-                var err = new ClientFunctionAPIError(this.callsiteNames.execution, this.callsiteNames.instantiation, MESSAGE.clientFunctionCantResolveTestRun);
+                const err = new ClientFunctionAPIError(this.callsiteNames.execution, this.callsiteNames.instantiation, RUNTIME_ERRORS.clientFunctionCannotResolveTestRun);
 
                 // NOTE: force callsite here, because more likely it will
                 // be impossible to resolve it by method name from a lazy promise.
@@ -128,10 +144,30 @@ export default class ClientFunctionBuilder {
                 throw err;
             }
 
-            var result = await testRun.executeCommand(command, callsite);
+            const result = await testRun.executeAction(command.type, command, callsite);
 
             return this._processResult(result, args);
         });
+    }
+
+    _executeCommandSync (args, testRun, callsite) {
+        // NOTE: should be kept outside of lazy promise to preserve
+        // correct callsite in case of replicator error.
+        const command = this.getCommand(args);
+
+        if (!testRun) {
+            const err = new ClientFunctionAPIError(this.callsiteNames.execution, this.callsiteNames.instantiation, RUNTIME_ERRORS.clientFunctionCannotResolveTestRun);
+
+            // NOTE: force callsite here, because more likely it will
+            // be impossible to resolve it by method name from a lazy promise.
+            err.callsite = callsite;
+
+            throw err;
+        }
+
+        const result = testRun.executeActionSync(command.type, command, callsite);
+
+        return this._processResult(result, args);
     }
 
     _processResult (result) {
@@ -139,18 +175,18 @@ export default class ClientFunctionBuilder {
     }
 
     _validateOptions (options) {
-        assertType(is.nonNullObject, this.callsiteNames.instantiation, '"options" argument', options);
+        assertType(is.nonNullObject, this.callsiteNames.instantiation, 'The "options" argument', options);
 
         if (!isNullOrUndefined(options.boundTestRun)) {
             // NOTE: `boundTestRun` can be either TestController or TestRun instance.
-            var boundTestRun = options.boundTestRun.testRun || options.boundTestRun;
+            const boundTestRun = options.boundTestRun.testRun || options.boundTestRun;
 
             if (!boundTestRun[testRunMarker])
-                throw new APIError(this.callsiteNames.instantiation, MESSAGE.invalidClientFunctionTestRunBinding);
+                throw new APIError(this.callsiteNames.instantiation, RUNTIME_ERRORS.invalidClientFunctionTestRunBinding);
         }
 
         if (!isNullOrUndefined(options.dependencies))
-            assertType(is.nonNullObject, this.callsiteNames.instantiation, '"dependencies" option', options.dependencies);
+            assertType(is.nonNullObject, this.callsiteNames.instantiation, 'The "dependencies" option', options.dependencies);
     }
 
     _getReplicatorTransforms () {

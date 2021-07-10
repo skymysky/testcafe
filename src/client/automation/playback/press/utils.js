@@ -1,22 +1,35 @@
-import { KEY_MAPS, domUtils } from '../../deps/testcafe-core';
+import hammerhead from '../../deps/hammerhead';
+import {
+    KEY_MAPS,
+    domUtils,
+    arrayUtils
+} from '../../deps/testcafe-core';
+
 import isLetter from '../../utils/is-letter';
 
 
+const nativeMethods    = hammerhead.nativeMethods;
+const browserUtils     = hammerhead.utils.browser;
+const focusBlurSandbox = hammerhead.eventSandbox.focusBlur;
+const Promise          = hammerhead.Promise;
+
+const { findDocument, isRadioButtonElement, getActiveElement } = domUtils;
+
 export function changeLetterCase (letter) {
-    var isLowCase = letter === letter.toLowerCase();
+    const isLowCase = letter === letter.toLowerCase();
 
     return isLowCase ? letter.toUpperCase() : letter.toLowerCase();
 }
 
 export function getActualKeysAndEventKeyProperties (keyArray) {
-    var eventKeyProperties = keyArray.slice();
+    const eventKeyProperties = keyArray.slice();
 
     //NOTE: check 'shift' modifier in keys
-    for (var i = 0; i < keyArray.length; i++) {
-        var key = keyArray[i];
+    for (let i = 0; i < keyArray.length; i++) {
+        const key = keyArray[i];
 
         if (key.toLowerCase() === 'shift') {
-            var nextKey = keyArray[i + 1];
+            const nextKey = keyArray[i + 1];
 
             if (!nextKey)
                 continue;
@@ -54,21 +67,101 @@ export function getChar (key, shiftModified) {
 }
 
 export function getDeepActiveElement (currentDocument) {
-    var doc                   = currentDocument || document;
-    var activeElementInIframe = null;
-    var activeElement         = doc.activeElement &&
-                                domUtils.isDomElement(doc.activeElement) ? doc.activeElement : doc.body;
+    const doc                 = currentDocument || document;
+    const activeElement       = getActiveElement(doc);
+    let activeElementInIframe = null;
 
-    if (activeElement && domUtils.isIframeElement(activeElement) && activeElement.contentDocument) {
+
+    if (activeElement && domUtils.isIframeElement(activeElement) &&
+        nativeMethods.contentDocumentGetter.call(activeElement)) {
         try {
-            activeElementInIframe = getDeepActiveElement(activeElement.contentDocument);
+            activeElementInIframe = getDeepActiveElement(nativeMethods.contentDocumentGetter.call(activeElement));
         }
-            /*eslint-disable no-empty */
-        catch (e) {
+        catch (e) { // eslint-disable-line no-empty
         }
-        /*eslint-enable no-empty */
     }
 
     return activeElementInIframe || activeElement;
 }
 
+export function focusNextElement (element, reverse, skipRadioGroups) {
+    return new Promise(resolve => {
+        const nextElement = getNextFocusableElement(element, reverse, skipRadioGroups);
+
+        if (nextElement)
+            focusBlurSandbox.focus(nextElement, () => resolve(nextElement));
+        else
+            resolve();
+    });
+}
+
+function getFocusableElementsFilter (sourceElement, skipRadioGroups) {
+    let filter = null;
+
+    if (skipRadioGroups) {
+        // NOTE: in all browsers except Mozilla and Opera focus sets on one radio set from group only.
+        // in Mozilla and Opera focus sets on any radio set.
+        if (sourceElement.name !== '' && !browserUtils.isFirefox)
+            filter = item => !item.name || item === sourceElement || item.name !== sourceElement.name;
+    }
+    // NOTE arrow navigations works with radio buttons in all browsers only between radio buttons with same names
+    // Navigation between radio buttons without name just moves focus between radio buttons in Chrome
+    // In other browsers navigation between radio buttons without name does not work
+    else if (sourceElement.name !== '')
+        filter = item => isRadioButtonElement(item) && item.name === sourceElement.name;
+    else if (browserUtils.isChrome)
+        filter = item => isRadioButtonElement(item) && !item.name;
+
+    return filter;
+}
+
+function filterFocusableElements (elements, sourceElement, skipRadioGroups) {
+    if (!isRadioButtonElement(sourceElement))
+        return elements;
+
+    if (!skipRadioGroups && !sourceElement.name && !browserUtils.isChrome)
+        return [sourceElement];
+
+    const filterFn = getFocusableElementsFilter(sourceElement, skipRadioGroups);
+
+    if (filterFn)
+        elements = arrayUtils.filter(elements, filterFn);
+
+    return elements;
+}
+
+function correctFocusableElement (elements, element, skipRadioGroups) {
+    const isNotCheckedRadioButtonElement      = isRadioButtonElement(element) && element.name && !element.checked;
+    let checkedRadioButtonElementWithSameName = null;
+
+    if (skipRadioGroups && isNotCheckedRadioButtonElement) {
+        checkedRadioButtonElementWithSameName = arrayUtils.find(elements, el => {
+            return isRadioButtonElement(el) && el.name === element.name && el.checked;
+        });
+    }
+
+    return checkedRadioButtonElementWithSameName || element;
+}
+
+export function getNextFocusableElement (element, reverse, skipRadioGroups) {
+    const offset     = reverse ? -1 : 1;
+    let allFocusable = domUtils.getFocusableElements(findDocument(element), true);
+
+    allFocusable = filterFocusableElements(allFocusable, element, skipRadioGroups);
+
+    const isRadioInput         = isRadioButtonElement(element);
+    const currentIndex         = arrayUtils.indexOf(allFocusable, element);
+    const isLastElementFocused = reverse ? currentIndex === 0 : currentIndex === allFocusable.length - 1;
+
+    if (isLastElementFocused) {
+        if (!reverse && element.tabIndex < 0)
+            return arrayUtils.find(allFocusable, el => el.tabIndex === 0);
+
+        return skipRadioGroups || !isRadioInput ? document.body : allFocusable[allFocusable.length - 1 - currentIndex];
+    }
+
+    if (reverse && currentIndex === -1)
+        return allFocusable[allFocusable.length - 1];
+
+    return correctFocusableElement(allFocusable, allFocusable[currentIndex + offset], skipRadioGroups);
+}

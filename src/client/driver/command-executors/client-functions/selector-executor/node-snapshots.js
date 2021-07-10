@@ -2,80 +2,84 @@ import { positionUtils, domUtils } from '../../../deps/testcafe-core';
 
 import {
     NODE_SNAPSHOT_PROPERTIES,
-    ELEMENT_SNAPSHOT_PROPERTIES
+    ELEMENT_SNAPSHOT_PROPERTIES,
+    ELEMENT_ACTION_SNAPSHOT_PROPERTIES
 } from '../../../../../client-functions/selectors/snapshot-properties';
-
-import {
-    getAttrs,
-    getChildNodes,
-    getChildren,
-    getTextContent,
-    getClassName,
-    getInnerText
-} from './sandboxed-node-properties';
 
 
 // Node
-var nodeSnapshotPropertyInitializers = {
-    textContent:    getTextContent,
-    childNodeCount: node => getChildNodes(node).length,
+const nodeSnapshotPropertyInitializers = {
+    /*eslint-disable no-restricted-properties*/
+    textContent:    node => node.textContent,
+    childNodeCount: node => node.childNodes.length,
+    /*eslint-enable no-restricted-properties*/
     hasChildNodes:  node => !!nodeSnapshotPropertyInitializers.childNodeCount(node),
 
     childElementCount: node => {
-        var children = getChildren(node);
+        /*eslint-disable no-restricted-properties*/
+        const children = node.children;
 
         if (children)
             return children.length;
 
         // NOTE: IE doesn't have `children` for non-element nodes =/
-        var childElementCount = 0;
-        var childNodeCount    = node.childNodes.length;
+        let childElementCount = 0;
+        const childNodeCount  = node.childNodes.length;
 
-        for (var i = 0; i < childNodeCount; i++) {
+        for (let i = 0; i < childNodeCount; i++) {
             if (node.childNodes[i].nodeType === 1)
                 childElementCount++;
         }
+        /*eslint-enable no-restricted-properties*/
 
         return childElementCount;
     },
 
+    /*eslint-disable no-restricted-properties*/
     hasChildElements: node => !!nodeSnapshotPropertyInitializers.childElementCount(node)
+    /*eslint-enable no-restricted-properties*/
 };
 
-export class NodeSnapshot {
-    constructor (node) {
-        this._initializeProperties(node, NODE_SNAPSHOT_PROPERTIES, nodeSnapshotPropertyInitializers);
-    }
-
+class BaseSnapshot {
     _initializeProperties (node, properties, initializers) {
-        for (var i = 0; i < properties.length; i++) {
-            var property    = properties[i];
-            var initializer = initializers[property];
+        for (let i = 0; i < properties.length; i++) {
+            const property    = properties[i];
+            const initializer = initializers[property];
 
             this[property] = initializer ? initializer(node) : node[property];
         }
     }
 }
 
+export class NodeSnapshot extends BaseSnapshot {
+    constructor (node) {
+        super();
+
+        this._initializeProperties(node, NODE_SNAPSHOT_PROPERTIES, nodeSnapshotPropertyInitializers);
+    }
+}
+
 
 // Element
-var elementSnapshotPropertyInitializers = {
+const elementSnapshotPropertyInitializers = {
     tagName: element => element.tagName.toLowerCase(),
     visible: positionUtils.isElementVisible,
     focused: element => domUtils.getActiveElement() === element,
 
     attributes: element => {
-        var attrs  = getAttrs(element);
-        var result = {};
+        // eslint-disable-next-line no-restricted-properties
+        const attrs  = element.attributes;
+        const result = {};
 
-        for (var i = attrs.length - 1; i >= 0; i--)
+        for (let i = attrs.length - 1; i >= 0; i--)
+            // eslint-disable-next-line no-restricted-properties
             result[attrs[i].name] = attrs[i].value;
 
         return result;
     },
 
     boundingClientRect: element => {
-        var rect = element.getBoundingClientRect();
+        const rect = element.getBoundingClientRect();
 
         return {
             left:   rect.left,
@@ -88,7 +92,7 @@ var elementSnapshotPropertyInitializers = {
     },
 
     classNames: element => {
-        var className = getClassName(element);
+        let className = element.className;
 
         className = typeof className.animVal === 'string' ? className.animVal : className;
 
@@ -98,11 +102,11 @@ var elementSnapshotPropertyInitializers = {
     },
 
     style: element => {
-        var result   = {};
-        var computed = window.getComputedStyle(element);
+        const result   = {};
+        const computed = window.getComputedStyle(element);
 
-        for (var i = 0; i < computed.length; i++) {
-            var prop = computed[i];
+        for (let i = 0; i < computed.length; i++) {
+            const prop = computed[i];
 
             result[prop] = computed[prop];
         }
@@ -110,8 +114,17 @@ var elementSnapshotPropertyInitializers = {
         return result;
     },
 
-    innerText: getInnerText
+    // eslint-disable-next-line no-restricted-properties
+    innerText: element => element.innerText
 };
+
+export class ElementActionSnapshot extends BaseSnapshot {
+    constructor (element) {
+        super(element);
+
+        this._initializeProperties(element, ELEMENT_ACTION_SNAPSHOT_PROPERTIES, elementSnapshotPropertyInitializers);
+    }
+}
 
 export class ElementSnapshot extends NodeSnapshot {
     constructor (element) {

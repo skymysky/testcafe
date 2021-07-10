@@ -1,29 +1,28 @@
 import testCafeCore from '../../deps/testcafe-core';
-import { utils } from '../../deps/hammerhead';
 import SelectBaseAutomation from './base';
 import * as selectUtils from './utils';
 
-var textSelection = testCafeCore.textSelection;
-var domUtils      = testCafeCore.domUtils;
-var positionUtils = testCafeCore.positionUtils;
+const textSelection = testCafeCore.textSelection;
+const domUtils      = testCafeCore.domUtils;
+const positionUtils = testCafeCore.positionUtils;
 
 
 export default class SelectTextAutomation extends SelectBaseAutomation {
     constructor (element, startPos, endPos, actionOptions) {
-        super(element, utils.extend(actionOptions, { offsetX: 0, offsetY: 0 }));
+        super(element, actionOptions);
 
         this.startPos = startPos;
         this.endPos   = endPos;
     }
 
     _calculateAbsoluteStartPoint () {
-        var point = selectUtils.getSelectionCoordinatesByPosition(this.element, this.startPos);
+        const point = selectUtils.getSelectionCoordinatesByPosition(this.element, this.startPos);
 
         return point || positionUtils.findCenter(this.element);
     }
 
     _calculateAbsoluteEndPoint () {
-        var point = selectUtils.getSelectionCoordinatesByPosition(this.element, this.endPos);
+        const point = selectUtils.getSelectionCoordinatesByPosition(this.element, this.endPos);
 
         if (point)
             return point;
@@ -36,8 +35,8 @@ export default class SelectTextAutomation extends SelectBaseAutomation {
     }
 
     _setSelection () {
-        var isTextEditable    = domUtils.isTextEditableElement(this.element);
-        var isContentEditable = domUtils.isContentEditableElement(this.element);
+        const isTextEditable    = domUtils.isTextEditableElement(this.element);
+        const isContentEditable = domUtils.isContentEditableElement(this.element);
 
         if (!(isTextEditable || isContentEditable) || this.eventState.simulateDefaultBehavior === false)
             return;

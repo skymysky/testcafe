@@ -1,19 +1,20 @@
-import hammerhead from '../deps/hammerhead';
-import testCafeCore from '../deps/testcafe-core';
+import { navigateTo, Promise } from '../deps/hammerhead';
+import { RequestBarrier, pageUnloadBarrier } from '../deps/testcafe-core';
+
 import DriverStatus from '../status';
 
-var Promise = hammerhead.Promise;
 
-var RequestBarrier    = testCafeCore.RequestBarrier;
-var pageUnloadBarrier = testCafeCore.pageUnloadBarrier;
+export default async function executeNavigateTo (command) {
+    try {
+        const requestBarrier = new RequestBarrier();
 
+        navigateTo(command.url, command.forceReload);
 
-export default function executeNavigateTo (command) {
-    var requestBarrier = new RequestBarrier();
+        await Promise.all([requestBarrier.wait(), pageUnloadBarrier.wait()]);
 
-    hammerhead.navigateTo(command.url);
-
-    return Promise.all([requestBarrier.wait(), pageUnloadBarrier.wait()])
-        .then(() => new DriverStatus({ isCommandResult: true }))
-        .catch(err => new DriverStatus({ isCommandResult: true, executionError: err }));
+        return new DriverStatus({ isCommandResult: true });
+    }
+    catch (error) {
+        return new DriverStatus({ isCommandResult: true, executionError: error });
+    }
 }

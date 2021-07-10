@@ -1,5 +1,5 @@
 // NOTE: to preserve callsites, add new tests AFTER the existing ones
-import { ClientFunction } from 'testcafe';
+import { Selector, ClientFunction } from 'testcafe';
 import { expect } from 'chai';
 
 
@@ -33,7 +33,7 @@ test('Click on element in a nested iframe', async t => {
         .switchToMainWindow()
         .click('#btn');
 
-    var btnClickCount               = await getBtnClickCount();
+    let btnClickCount               = await getBtnClickCount();
     const nestedIframeBtnClickCount = await getNestedIframeBtnClickCount();
 
     expect(btnClickCount).eql(1);
@@ -54,6 +54,10 @@ test('Click on element in a nested iframe', async t => {
 
 test('Switch to a non-existent iframe', async t => {
     await t.switchToIframe('#non-existent');
+});
+
+test('Switch to an invisible iframe', async t => {
+    await t.switchToIframe('#invisible-iframe');
 });
 
 test('Click in a slowly loading iframe', async t => {
@@ -198,4 +202,11 @@ test('Click in an iframe that is not loaded', async t => {
         .click('#too-long-loading-page-link')
         .wait(3000)
         .click('#second-page-btn');
+});
+
+test('Click in an iframe with the srcdoc attribute', async t => {
+    await t
+        .switchToIframe('#iframe-with-srcdoc')
+        .click('#target')
+        .expect(Selector('#target').innerText).eql('text in iframe with the srcdoc attribute');
 });

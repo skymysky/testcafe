@@ -1,9 +1,9 @@
-var expect                     = require('chai').expect;
-var errorInEachBrowserContains = require('../../../../assertion-helper.js').errorInEachBrowserContains;
+const expect                     = require('chai').expect;
+const errorInEachBrowserContains = require('../../../../assertion-helper.js').errorInEachBrowserContains;
 
 describe('[Raw API] Type action', function () {
     it('Should type in an input', function () {
-        return runTests('./testcafe-fixtures/type.testcafe', 'Type in simple input', { shouldFail: true })
+        return runTests('./testcafe-fixtures/type.testcafe', 'Type in simple input', { shouldFail: true, speed: 0.01 })
             .catch(function (errs) {
                 errorInEachBrowserContains(errs, 'Type in input raised', 0);
             });

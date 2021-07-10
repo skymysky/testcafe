@@ -8,7 +8,7 @@ const RAW_API_JS_EXPRESSION_TYPE = 'js-expr';
 
 export function isCommandRejectableByPageError (command) {
     return !isObservationCommand(command) && !isBrowserManipulationCommand(command) && !isServiceCommand(command) ||
-           isRejectablePrepareBrowserManipulationCommand(command)
+           isResizeWindowCommand(command)
            && !isWindowSwitchingCommand(command);
 }
 
@@ -17,10 +17,11 @@ function isClientFunctionCommand (command) {
            command.type === TYPE.executeSelector;
 }
 
-function isObservationCommand (command) {
+export function isObservationCommand (command) {
     return isClientFunctionCommand(command) ||
            command.type === TYPE.wait ||
-           command.type === TYPE.assertion;
+           command.type === TYPE.assertion ||
+           command.type === TYPE.executeExpression;
 }
 
 function isWindowSwitchingCommand (command) {
@@ -28,52 +29,57 @@ function isWindowSwitchingCommand (command) {
 }
 
 export function canSetDebuggerBreakpointBeforeCommand (command) {
-    return command.type !== TYPE.debug && !isClientFunctionCommand(command) && !isBrowserManipulationCommand(command) &&
-           !isServiceCommand(command);
+    return command.type !== TYPE.debug && !isClientFunctionCommand(command) && !isServiceCommand(command);
 }
 
-export function isBrowserManipulationCommand (command) {
+export function isScreenshotCommand (command) {
     return command.type === TYPE.takeScreenshot ||
-           command.type === TYPE.takeScreenshotOnFail ||
-           command.type === TYPE.resizeWindow ||
+           command.type === TYPE.takeElementScreenshot ||
+           command.type === TYPE.takeScreenshotOnFail;
+}
+
+export function isResizeWindowCommand (command) {
+    return command.type === TYPE.resizeWindow ||
            command.type === TYPE.resizeWindowToFitDevice ||
            command.type === TYPE.maximizeWindow;
 }
 
-function isRejectablePrepareBrowserManipulationCommand (command) {
-    return command.type === TYPE.prepareBrowserManipulation &&
-           (command.manipulationCommandType === TYPE.resizeWindow ||
-            command.manipulationCommandType === TYPE.resizeWindowToFitDevice ||
-            command.manipulationCommandType === TYPE.maximizeWindow);
-}
-
-function isServicePrepareBrowserManipulationCommand (command) {
-    return command.type === TYPE.prepareBrowserManipulation &&
-           command.manipulationCommandType === TYPE.takeScreenshotOnFail;
+export function isBrowserManipulationCommand (command) {
+    return isScreenshotCommand(command) || isResizeWindowCommand(command);
 }
 
 export function isServiceCommand (command) {
     return command.type === TYPE.testDone ||
-           command.type === TYPE.takeScreenshotOnFail ||
            command.type === TYPE.showAssertionRetriesStatus ||
            command.type === TYPE.hideAssertionRetriesStatus ||
            command.type === TYPE.setBreakpoint ||
-           isServicePrepareBrowserManipulationCommand(command);
+           command.type === TYPE.takeScreenshotOnFail ||
+           command.type === TYPE.recorder;
 }
 
 export function isExecutableInTopWindowOnly (command) {
     return command.type === TYPE.testDone ||
-           command.type === TYPE.prepareBrowserManipulation ||
            command.type === TYPE.switchToMainWindow ||
            command.type === TYPE.setNativeDialogHandler ||
            command.type === TYPE.getNativeDialogHistory ||
            command.type === TYPE.setTestSpeed ||
            command.type === TYPE.showAssertionRetriesStatus ||
            command.type === TYPE.hideAssertionRetriesStatus ||
-           command.type === TYPE.setBreakpoint;
+           command.type === TYPE.setBreakpoint ||
+           isBrowserManipulationCommand(command) && command.type !== TYPE.takeElementScreenshot;
 }
 
 export function isJSExpression (val) {
     return val !== null && typeof val === 'object' && val.type === RAW_API_JS_EXPRESSION_TYPE &&
            typeof val.value === 'string';
+}
+
+export function isExecutableOnClientCommand (command) {
+    return command.type !== TYPE.wait &&
+           command.type !== TYPE.setPageLoadTimeout &&
+           command.type !== TYPE.debug &&
+           command.type !== TYPE.useRole &&
+           command.type !== TYPE.assertion &&
+           command.type !== TYPE.executeExpression &&
+           command.type !== TYPE.executeAsyncExpression;
 }

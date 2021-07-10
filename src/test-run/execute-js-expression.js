@@ -1,32 +1,95 @@
-import { createContext, runInContext } from 'vm';
-import SelectorBuilder from '../client-functions/selectors/selector-builder';
-import ClientFunctionBuilder from '../client-functions/client-function-builder';
+import { runInContext } from 'vm';
+import {
+    GeneralError,
+    TestCompilationError,
+    APIError,
+    CompositeError
+} from '../errors/runtime';
+import { UncaughtErrorInCustomScript, UncaughtTestCafeErrorInCustomScript } from '../errors/test-run';
+import { setContextOptions } from '../api/test-controller/execution-context';
 
-export function executeJsExpression (expression, skipVisibilityCheck, testRun) {
-    var sandbox = {
-        Selector: (fn, options = {}) => {
-            if (skipVisibilityCheck)
-                options.visibilityCheck = false;
+const ERROR_LINE_COLUMN_REGEXP = /\[JS code\]:(\d+):(\d+)/;
+const ERROR_LINE_OFFSET        = -1;
 
-            if (testRun)
-                options.boundTestRun = testRun;
+// NOTE: do not beautify this code since offsets for error lines and columns are coded here
+function wrapInAsync (expression) {
+    return '(async function() {\n' +
+           expression + ';\n' +
+           '});';
+}
 
-            var builder = new SelectorBuilder(fn, options, { instantiation: 'Selector' });
+function getErrorLineColumn (err) {
+    if (err.isTestCafeError) {
+        if (!err.callsite)
+            return {};
 
-            return builder.getFunction();
-        },
+        const stackFrames = err.callsite.stackFrames || [];
+        const frameIndex  = err.callsite.callsiteFrameIdx;
+        const stackFrame  = stackFrames[frameIndex];
 
-        ClientFunction: (fn, options = {}) => {
-            if (testRun)
-                options.boundTestRun = testRun;
+        return stackFrame ? {
+            line:   stackFrame.getLineNumber(),
+            column: stackFrame.getColumnNumber()
+        } : {};
+    }
 
-            var builder = new ClientFunctionBuilder(fn, options, { instantiation: 'ClientFunction' });
+    const result = err.stack && err.stack.match(ERROR_LINE_COLUMN_REGEXP);
 
-            return builder.getFunction();
-        }
+    if (!result)
+        return {};
+
+    const line   = result[1] ? parseInt(result[1], 10) : void 0;
+    const column = result[2] ? parseInt(result[2], 10) : void 0;
+
+    return { line, column };
+}
+
+function createErrorFormattingOptions () {
+    return {
+        filename:   '[JS code]',
+        lineOffset: ERROR_LINE_OFFSET
     };
+}
 
-    var context = createContext(sandbox);
+function getExecutionContext (testController, options = {}) {
+    const context = testController.getExecutionContext();
 
-    return runInContext(expression, context, { displayErrors: false });
+    // TODO: Find a way to avoid this assignment
+    setContextOptions(context, options);
+
+    return context;
+}
+
+function isRuntimeError (err) {
+    return err instanceof GeneralError ||
+           err instanceof TestCompilationError ||
+           err instanceof APIError ||
+           err instanceof CompositeError;
+}
+
+export function executeJsExpression (expression, testRun, options) {
+    const context      = getExecutionContext(testRun.controller, options);
+    const errorOptions = createErrorFormattingOptions();
+
+    return runInContext(expression, context, errorOptions);
+}
+
+export async function executeAsyncJsExpression (expression, testRun, callsite) {
+    if (!expression || !expression.length)
+        return Promise.resolve();
+
+    const context      = getExecutionContext(testRun.controller);
+    const errorOptions = createErrorFormattingOptions(expression);
+
+    try {
+        return await runInContext(wrapInAsync(expression), context, errorOptions)();
+    }
+    catch (err) {
+        const { line, column } = getErrorLineColumn(err);
+
+        if (err.isTestCafeError || isRuntimeError(err))
+            throw new UncaughtTestCafeErrorInCustomScript(err, expression, line, column, callsite);
+
+        throw new UncaughtErrorInCustomScript(err, expression, line, column, callsite);
+    }
 }

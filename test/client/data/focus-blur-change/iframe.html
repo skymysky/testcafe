@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <link type="text/css" rel=stylesheet href="/ui.css" class="ui-stylesheet-hammerhead-shadow-ui">
+    <link type="text/css" rel=stylesheet href="/styles.css" class="ui-stylesheet-hammerhead-shadow-ui">
 
     <script src="/hammerhead.js" class="script-hammerhead-shadow-ui"></script>
 </head>
 <body>
 <!-- Resources loading -->
 <script>
-    var hammerhead = window['%hammerhead%'];
+    const hammerhead = window['%hammerhead%'];
 
-    hammerhead.get('./utils/destination-location').forceLocation('http://localhost/sessionId/http://target_url');
+    hammerhead.utils.destLocation.forceLocation('http://localhost/sessionId/http://target_url');
 
     hammerhead.start({ crossDomainProxyPort: 2000 });
 

@@ -1,12 +1,12 @@
-var expect                     = require('chai').expect;
-var errorInEachBrowserContains = require('../../../../assertion-helper.js').errorInEachBrowserContains;
+const expect                     = require('chai').expect;
+const errorInEachBrowserContains = require('../../../../assertion-helper.js').errorInEachBrowserContains;
 
 // NOTE: we set selectorTimeout to a large value in some tests to wait for
 // an iframe to load on the farm (it is fast locally but can take some time on the farm)
 
-var DEFAULT_SELECTOR_TIMEOUT   = 5000;
-var DEFAULT_RUN_OPTIONS        = { selectorTimeout: DEFAULT_SELECTOR_TIMEOUT };
-var DEFAULT_FAILED_RUN_OPTIONS = {
+const DEFAULT_SELECTOR_TIMEOUT   = 5000;
+const DEFAULT_RUN_OPTIONS        = { selectorTimeout: DEFAULT_SELECTOR_TIMEOUT };
+const DEFAULT_FAILED_RUN_OPTIONS = {
     shouldFail:      true,
     selectorTimeout: DEFAULT_SELECTOR_TIMEOUT
 };
@@ -48,7 +48,12 @@ describe('[API] t.switchToIframe(), t.switchToMainWindow()', function () {
     });
 
     it('Should work in a cross-domain iframe', function () {
-        return runTests('./testcafe-fixtures/iframe-switching-test.js', 'Click in a cross-domain iframe with redirect', DEFAULT_RUN_OPTIONS);
+        // TODO: fix this test for Safari on BrowserStack
+        return runTests('./testcafe-fixtures/iframe-switching-test.js', 'Click in a cross-domain iframe with redirect', { skip: 'safari', ...DEFAULT_RUN_OPTIONS });
+    });
+
+    it('Should work in an iframe with the srcdoc attribute', function () {
+        return runTests('./testcafe-fixtures/iframe-switching-test.js', 'Click in an iframe with the srcdoc attribute', { skip: 'ie', ...DEFAULT_RUN_OPTIONS });
     });
 
     describe('Unavailable iframe errors', function () {
@@ -56,8 +61,19 @@ describe('[API] t.switchToIframe(), t.switchToMainWindow()', function () {
             return runTests('./testcafe-fixtures/iframe-switching-test.js', 'Switch to a non-existent iframe',
                 { shouldFail: true })
                 .catch(function (errs) {
-                    expect(errs[0]).to.contains('The specified selector does not match any element in the DOM tree.');
+                    expect(errs[0]).to.contains(
+                        'The specified selector does not match any element in the DOM tree.' +
+                        '  > | Selector(\'#non-existent\')');
                     expect(errs[0]).to.contains("> 56 |    await t.switchToIframe('#non-existent');");
+                });
+        });
+
+        it('Should ensure the iframe element is visible before switching to it', function () {
+            return runTests('./testcafe-fixtures/iframe-switching-test.js', 'Switch to an invisible iframe',
+                { shouldFail: true, selectorTimeout: 1 })
+                .catch(function (errs) {
+                    expect(errs[0]).contains('The element that matches the specified selector is not visible');
+                    expect(errs[0]).contains('.switchToIframe(\'#invisible-iframe\'');
                 });
         });
 
@@ -65,7 +81,7 @@ describe('[API] t.switchToIframe(), t.switchToMainWindow()', function () {
             return runTests('./testcafe-fixtures/iframe-switching-test.js', 'Try to switch to an incorrect element', { shouldFail: true })
                 .catch(function (errs) {
                     expect(errs[0]).to.contains('The action element is expected to be an <iframe>.');
-                    expect(errs[0]).to.contains("> 70 |    await t.switchToIframe('body');");
+                    expect(errs[0]).to.contains("> 74 |    await t.switchToIframe('body');");
                 });
         });
 
@@ -76,7 +92,7 @@ describe('[API] t.switchToIframe(), t.switchToMainWindow()', function () {
             })
                 .catch(function (errs) {
                     expect(errs[0]).to.contains('Content of the iframe to which you are switching did not load.');
-                    expect(errs[0]).to.contains("> 180 |        .switchToIframe('#too-slowly-loading-iframe')");
+                    expect(errs[0]).to.contains("> 184 |        .switchToIframe('#too-slowly-loading-iframe')");
                 });
         });
 
@@ -84,7 +100,7 @@ describe('[API] t.switchToIframe(), t.switchToMainWindow()', function () {
             return runTests('./testcafe-fixtures/iframe-switching-test.js', 'Click in a removed iframe', DEFAULT_FAILED_RUN_OPTIONS)
                 .catch(function (errs) {
                     expect(errs[0]).to.contains('The iframe in which the test is currently operating does not exist anymore.');
-                    expect(errs[0]).to.contains("> 89 |        .click('#btn');");
+                    expect(errs[0]).to.contains("> 93 |        .click('#btn');");
                 });
         });
 
@@ -92,7 +108,7 @@ describe('[API] t.switchToIframe(), t.switchToMainWindow()', function () {
             return runTests('./testcafe-fixtures/iframe-switching-test.js', 'Click in an invisible iframe', DEFAULT_FAILED_RUN_OPTIONS)
                 .catch(function (errs) {
                     expect(errs[0]).to.contains('The iframe in which the test is currently operating is not visible anymore.');
-                    expect(errs[0]).to.contains("> 192 |        .click('#btn');");
+                    expect(errs[0]).to.contains("> 196 |        .click('#btn');");
                 });
         });
 
@@ -106,7 +122,7 @@ describe('[API] t.switchToIframe(), t.switchToMainWindow()', function () {
             })
                 .catch(function (errs) {
                     expect(errs[0]).to.contains('Content of the iframe in which the test is currently operating did not load.');
-                    expect(errs[0]).to.contains("> 200 |        .click('#second-page-btn');");
+                    expect(errs[0]).to.contains("> 204 |        .click('#second-page-btn');");
                 });
         });
     });

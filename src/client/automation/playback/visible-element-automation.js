@@ -1,15 +1,28 @@
 import hammerhead from '../deps/hammerhead';
-import { delay, positionUtils, domUtils, arrayUtils, serviceUtils } from '../deps/testcafe-core';
+
+import {
+    delay,
+    positionUtils,
+    domUtils,
+    arrayUtils,
+    serviceUtils,
+    eventUtils
+} from '../deps/testcafe-core';
+
 import getAutomationPoint from '../utils/get-automation-point';
 import screenPointToClient from '../utils/screen-point-to-client';
-import { fromPoint as getElementFromPoint } from '../get-element';
+import getDevicePoint from '../utils/get-device-point';
+import { getOffsetOptions } from '../utils/offsets';
+import { fromPoint as getElementFromPoint, underCursor as getElementUnderCursor } from '../get-element';
 import AUTOMATION_ERROR_TYPES from '../errors';
 import AutomationSettings from '../settings';
 import ScrollAutomation from './scroll';
 import MoveAutomation from './move';
-import { MoveOptions } from '../../../test-run/commands/options';
+import { MoveOptions, ScrollOptions } from '../../../test-run/commands/options';
+import lastHoveredElementHolder from './last-hovered-element-holder';
+import { MoveBehaviour } from './move/event-sequence/event-behaviors';
 
-var extend = hammerhead.utils.extend;
+const extend = hammerhead.utils.extend;
 
 class ElementState {
     constructor ({ element = null, clientPoint = null, screenPoint = null, isTarget = false, inMoving = false }) {
@@ -18,6 +31,7 @@ class ElementState {
         this.screenPoint = screenPoint;
         this.isTarget    = isTarget;
         this.inMoving    = inMoving;
+        this.devicePoint = getDevicePoint(clientPoint);
     }
 }
 
@@ -33,15 +47,15 @@ export default class VisibleElementAutomation extends serviceUtils.EventEmitter 
     }
 
     _getElementForEvent (eventArgs) {
-        var { x, y }        = eventArgs.point;
-        var expectedElement = positionUtils.containsOffset(this.element, this.options.offsetX, this.options.offsetY) ? this.element : null;
+        const { x, y }        = eventArgs.point;
+        const expectedElement = positionUtils.containsOffset(this.element, this.options.offsetX, this.options.offsetY) ? this.element : null;
 
         return getElementFromPoint(x, y, expectedElement).then(({ element }) => element);
     }
 
     _moveToElement () {
-        var moveOptions    = new MoveOptions(extend({ skipScrolling: true }, this.options), false);
-        var moveAutomation = new MoveAutomation(this.element, moveOptions);
+        const moveOptions    = new MoveOptions(extend({ skipScrolling: true }, this.options), false);
+        const moveAutomation = new MoveAutomation(this.element, moveOptions);
 
         return moveAutomation
             .run()
@@ -49,50 +63,97 @@ export default class VisibleElementAutomation extends serviceUtils.EventEmitter 
     }
 
     _scrollToElement () {
-        var scrollAutomation = new ScrollAutomation(this.element, this.options);
+        const scrollOptions    = new ScrollOptions(this.options);
+        const scrollAutomation = new ScrollAutomation(this.element, scrollOptions);
+        let wasScrolled        = false;
 
         return scrollAutomation
             .run()
-            .then(() => delay(this.automationSettings.mouseActionStepDelay));
+            .then(scrollWasPerformed => {
+                wasScrolled = scrollWasPerformed;
+
+                return delay(this.automationSettings.mouseActionStepDelay);
+            })
+            .then(getElementUnderCursor)
+            .then(currentElement => {
+                const elementUnderCursorContainsTarget = !!currentElement && domUtils.contains(this.element, currentElement);
+
+                if (!elementUnderCursorContainsTarget || !wasScrolled)
+                    return null;
+
+                const prevElement    = lastHoveredElementHolder.get();
+                const commonAncestor = domUtils.getCommonAncestor(currentElement, prevElement);
+                const clientPosition = positionUtils.getClientPosition(currentElement);
+                const devicePoint    = getDevicePoint({ x: clientPosition.x, y: clientPosition.y });
+                const options        = {
+                    clientX: clientPosition.x,
+                    clientY: clientPosition.y,
+                    screenX: devicePoint.x,
+                    screenY: devicePoint.y,
+                    ctrl:    false,
+                    alt:     false,
+                    shift:   false,
+                    meta:    false,
+                    buttons: eventUtils.BUTTONS_PARAMETER.leftButton
+                };
+
+                MoveBehaviour.leaveElement(currentElement, prevElement, commonAncestor, options);
+                MoveBehaviour.enterElement(currentElement, prevElement, commonAncestor, options);
+
+                lastHoveredElementHolder.set(currentElement);
+
+                return wasScrolled;
+            });
+    }
+
+    _getElementOffset () {
+        const defaultOffsets = getOffsetOptions(this.element);
+
+        let { offsetX, offsetY } = this.options;
+
+        offsetX = offsetX || offsetX === 0 ? offsetX : defaultOffsets.offsetX;
+        offsetY = offsetY || offsetY === 0 ? offsetY : defaultOffsets.offsetY;
+
+        return { offsetX, offsetY };
     }
 
     _wrapAction (action) {
-        var offsetX                    = this.options.offsetX;
-        var offsetY                    = this.options.offsetY;
-        var screenPointBeforeAction    = getAutomationPoint(this.element, offsetX, offsetY);
-        var clientPositionBeforeAction = positionUtils.getClientPosition(this.element);
+        const { offsetX, offsetY } = this._getElementOffset();
+
+        const screenPointBeforeAction    = getAutomationPoint(this.element, offsetX, offsetY);
+        const clientPositionBeforeAction = positionUtils.getClientPosition(this.element);
 
         return action()
             .then(() => {
-                var screenPointAfterAction    = getAutomationPoint(this.element, offsetX, offsetY);
-                var clientPositionAfterAction = positionUtils.getClientPosition(this.element);
-                var clientPoint               = screenPointToClient(this.element, screenPointAfterAction);
-                var expectedElement           = positionUtils.containsOffset(this.element, offsetX, offsetY) ? this.element : null;
+                const screenPointAfterAction    = getAutomationPoint(this.element, offsetX, offsetY);
+                const clientPositionAfterAction = positionUtils.getClientPosition(this.element);
+                const clientPoint               = screenPointToClient(this.element, screenPointAfterAction);
+                const expectedElement           = positionUtils.containsOffset(this.element, offsetX, offsetY) ? this.element : null;
 
                 return getElementFromPoint(clientPoint.x, clientPoint.y, expectedElement)
                     .then(({ element, corrected }) => {
-                        var foundElement = element;
+                        const foundElement = element;
 
                         if (!foundElement)
                             return new ElementState({});
 
-                        var isTarget = !expectedElement || corrected || foundElement === this.element;
+                        let isTarget = !expectedElement || corrected || foundElement === this.element;
 
                         if (!isTarget) {
                             // NOTE: perform an operation with searching in dom only if necessary
                             isTarget = arrayUtils.indexOf(domUtils.getParents(foundElement), this.element) > -1;
                         }
 
-                        var offsetPositionChanged = screenPointBeforeAction.x !== screenPointAfterAction.x ||
+                        const offsetPositionChanged = screenPointBeforeAction.x !== screenPointAfterAction.x ||
                                                     screenPointBeforeAction.y !== screenPointAfterAction.y;
-                        var clientPositionChanged = clientPositionBeforeAction.x !== clientPositionAfterAction.x ||
+                        const clientPositionChanged = clientPositionBeforeAction.x !== clientPositionAfterAction.x ||
                                                     clientPositionBeforeAction.y !== clientPositionAfterAction.y;
 
                         // NOTE: We consider the element moved if its offset position and client position
                         // are changed both. If only client position was changed it means the page was
                         // scrolled and the element keeps its position on the page. If only offset position was
                         // changed it means the element is fixed on the page (it can be implemented via script).
-                        var targetElementIsMoving = offsetPositionChanged && clientPositionChanged;
+                        const targetElementIsMoving = offsetPositionChanged && clientPositionChanged;
 
                         return new ElementState({
                             element,
@@ -111,13 +172,17 @@ export default class VisibleElementAutomation extends serviceUtils.EventEmitter 
 
         if (useStrictElementCheck && (!state.isTarget || state.inMoving))
             throw new Error(AUTOMATION_ERROR_TYPES.foundElementIsNotTarget);
+
+        return state;
     }
 
-    _ensureElement (useStrictElementCheck, skipCheckAfterMoving) {
+    _ensureElement (useStrictElementCheck, skipCheckAfterMoving, skipMoving) {
         return this
             ._wrapAction(() => this._scrollToElement())
             .then(state => VisibleElementAutomation._checkElementState(state, useStrictElementCheck))
-            .then(() => this._wrapAction(() => this._moveToElement()))
+            .then(state => {
+                return skipMoving ? state : this._wrapAction(() => this._moveToElement());
+            })
             .then(state => {
                 if (!skipCheckAfterMoving)
                     VisibleElementAutomation._checkElementState(state, useStrictElementCheck);
@@ -125,12 +190,13 @@ export default class VisibleElementAutomation extends serviceUtils.EventEmitter 
                 return state;
             })
             .then(state => {
-                this.emit(this.TARGET_ELEMENT_FOUND_EVENT, {});
+                this.emit(this.TARGET_ELEMENT_FOUND_EVENT, { element: state.element });
 
                 return {
                     element:     state.element,
                     clientPoint: state.clientPoint,
-                    screenPoint: state.screenPoint
+                    screenPoint: state.screenPoint,
+                    devicePoint: state.devicePoint
                 };
             });
     }

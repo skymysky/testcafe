@@ -1,29 +1,66 @@
-import ClientFunctionBuilder from '../../client-functions/client-function-builder';
-import SelectorBuilder from '../../client-functions/selectors/selector-builder';
-import { createRole, createAnonymousRole } from '../../role';
-import testControllerProxy from '../test-controller/proxy';
+const lazyRequire           = require('import-lazy')(require);
+const ClientFunctionBuilder = lazyRequire('../../client-functions/client-function-builder');
+const SelectorBuilder       = lazyRequire('../../client-functions/selectors/selector-builder');
+const role                  = lazyRequire('../../role');
+const createRequestLogger   = lazyRequire('../request-hooks/request-logger');
+const createRequestMock     = lazyRequire('../request-hooks/request-mock/create-request-mock');
 
-function Role (loginPage, initFn, options) {
-    return createRole(loginPage, initFn, options);
+// NOTE: We can't use lazy require for RequestHook, because it will break base class detection for inherited classes
+let RequestHook = null;
+
+// NOTE: We can't use lazy require for testControllerProxy, because it will break test controller detection
+let testControllerProxy = null;
+
+function Role (loginUrl, initFn, options) {
+    return role.createRole(loginUrl, initFn, options);
 }
 
-Role.anonymous = createAnonymousRole;
+function RequestMock () {
+    return createRequestMock();
+}
+
+function RequestLogger (requestFilterRuleInit, logOptions) {
+    return createRequestLogger(requestFilterRuleInit, logOptions);
+}
+
+function ClientFunction (fn, options) {
+    const builder = new ClientFunctionBuilder(fn, options, { instantiation: 'ClientFunction' });
+
+    return builder.getFunction();
+}
+
+function Selector (fn, options) {
+    const builder = new SelectorBuilder(fn, options, { instantiation: 'Selector' });
+
+    return builder.getFunction();
+}
+
+Object.defineProperty(Role, 'anonymous', {
+    get: () => role.createAnonymousRole
+});
 
 export default {
     Role,
 
-    ClientFunction (fn, options) {
-        var builder = new ClientFunctionBuilder(fn, options, { instantiation: 'ClientFunction' });
+    ClientFunction,
 
-        return builder.getFunction();
+    Selector,
+
+    RequestLogger,
+
+    RequestMock,
+
+    get RequestHook () {
+        if (!RequestHook)
+            RequestHook = require('../request-hooks/hook');
+
+        return RequestHook;
     },
 
-    Selector (fn, options) {
-        var builder = new SelectorBuilder(fn, options, { instantiation: 'Selector' });
+    get t () {
+        if (!testControllerProxy)
+            testControllerProxy = require('../test-controller/proxy');
 
-        return builder.getFunction();
-    },
-
-    t: testControllerProxy
+        return testControllerProxy;
+    }
 };
-

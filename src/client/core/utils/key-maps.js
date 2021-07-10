@@ -1,6 +1,6 @@
 import hammerhead from '../deps/hammerhead';
 
-var browserUtils = hammerhead.utils.browser;
+const browserUtils = hammerhead.utils.browser;
 
 
 const MODIFIERS = {
@@ -54,10 +54,33 @@ const SPECIAL_KEYS = {
     up:        38
 };
 
-function reverseMap (map) {
-    var reversed = {};
+const KEY_PROPERTY = {
+    left:      browserUtils.isIE ? 'Left' : 'ArrowLeft',
+    down:      browserUtils.isIE ? 'Down' : 'ArrowDown',
+    right:     browserUtils.isIE ? 'Right' : 'ArrowRight',
+    up:        browserUtils.isIE ? 'Up' : 'ArrowUp',
+    backspace: 'Backspace',
+    capslock:  'CapsLock',
+    delete:    'Delete',
+    end:       'End',
+    enter:     'Enter',
+    esc:       'Escape',
+    home:      'Home',
+    ins:       'Insert',
+    pagedown:  'PageDown',
+    pageup:    'PageUp',
+    space:     browserUtils.isIE ? 'Spacebar' : ' ',
+    tab:       'Tab',
+    alt:       'Alt',
+    ctrl:      'Control',
+    meta:      'Meta',
+    shift:     'Shift'
+};
 
-    for (var key in map) {
+function reverseMap (map) {
+    const reversed = {};
+
+    for (const key in map) {
         if (map.hasOwnProperty(key))
             reversed[map[key]] = key;
     }
@@ -72,50 +95,23 @@ export default {
 
     specialKeys: SPECIAL_KEYS,
 
-    reversedModifiers: reverseMap(MODIFIERS),
-
-    reversedShiftMap: reverseMap(SHIFT_MAP),
-
-    reversedSpecialKeys: reverseMap(SPECIAL_KEYS),
+    keyProperty: KEY_PROPERTY,
 
     modifiersMap: {
         option: 'alt'
     },
 
-    keyProperty: {
-        left:      browserUtils.isIE ? 'Left' : 'ArrowLeft',
-        down:      browserUtils.isIE ? 'Down' : 'ArrowDown',
-        right:     browserUtils.isIE ? 'Right' : 'ArrowRight',
-        up:        browserUtils.isIE ? 'Up' : 'ArrowUp',
-        backspace: 'Backspace',
-        capslock:  'CapsLock',
-        delete:    'Delete',
-        end:       'End',
-        enter:     'Enter',
-        esc:       'Escape',
-        home:      'Home',
-        ins:       'Insert',
-        pagedown:  'PageDown',
-        pageup:    'PageUp',
-        space:     ' ',
-        tab:       'Tab',
-        alt:       'Alt',
-        ctrl:      'Control',
-        meta:      'Meta',
-        shift:     'Shift'
-    },
-
     symbolCharCodeToKeyCode: {
-        96: 192,    // `
-        91: 219,    // [
-        93: 221,    // ]
-        92: 220,    // \
-        59: 186,    // ;
-        39: 222,    // '
-        44: 188,    // ,
-        45: browserUtils.isFirefox ? 173 : 189,    // -
-        46: 190,    // .
-        47: 191     // /
+        96: 192, // `
+        91: 219, // [
+        93: 221, // ]
+        92: 220, // \
+        59: 186, // ;
+        39: 222, // '
+        44: 188, // ,
+        45: browserUtils.isFirefox ? 173 : 189, // -
+        46: 190, // .
+        47: 191 // /
     },
 
     symbolKeysCharCodes: {
@@ -147,5 +143,13 @@ export default {
         107: 43,
         106: 42,
         111: 47
-    }
+    },
+
+    reversedModifiers: reverseMap(MODIFIERS),
+
+    reversedShiftMap: reverseMap(SHIFT_MAP),
+
+    reversedSpecialKeys: reverseMap(SPECIAL_KEYS),
+
+    reversedKeyProperty: reverseMap(KEY_PROPERTY)
 };

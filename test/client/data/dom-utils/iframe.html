@@ -10,21 +10,21 @@
     <script src="/ui.js" class="script-hammerhead-shadow-ui"></script>
     <script src="/jquery.js" class="script-hammerhead-shadow-ui"></script>
 
-    <link type="text/css" rel=stylesheet href="/ui.css" class="ui-stylesheet-hammerhead-shadow-ui">
+    <link type="text/css" rel=stylesheet href="/styles.css" class="ui-stylesheet-hammerhead-shadow-ui">
 </head>
 <body>
 <script type="text/javascript">
-    var hammerhead = window['%hammerhead%'];
-    var settings = hammerhead.get('./settings');
+    const hammerhead = window['%hammerhead%'];
+    const settings   = hammerhead.settings;
 
     settings.get().crossDomainProxyPort = 2000;
 
-    var testCafeCore = window['%testCafeCore%'];
+    const testCafeCore = window['%testCafeCore%'];
 
     (function (isIFrameWindowInDOM, window, JSON) {
         window.addEventListener('message', function (event) {
             if (event.data === 'isIFrameWindowInDOM')
-                event.source.postMessage(JSON.stringify({ message: isIFrameWindowInDOM(window).toString() }), '*');
+                event.source.postMessage({ message: isIFrameWindowInDOM(window).toString() }, '*');
 
         }, false);
     })(testCafeCore.domUtils.isIFrameWindowInDOM, window, JSON);

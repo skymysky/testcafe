@@ -1,27 +1,18 @@
-import { Promise } from '../../../deps/hammerhead';
-import { delay, positionUtils, domUtils } from '../../../deps/testcafe-core';
-import { selectElement as selectElementUI } from '../../../deps/testcafe-ui';
+import { Promise, nativeMethods } from '../../../deps/hammerhead';
+import { delay, domUtils } from '../../../deps/testcafe-core';
 import ClientFunctionExecutor from '../client-function-executor';
-import { createReplicator, FunctionTransform, SelectorNodeTransform } from '../replicator';
+import { exists, visible } from '../../../utils/element-utils';
+import {
+    createReplicator,
+    FunctionTransform,
+    SelectorNodeTransform
+} from '../replicator';
+
 import './filter';
 
+const DateCtor = nativeMethods.date;
+
 const CHECK_ELEMENT_DELAY = 200;
-
-
-// Utils
-function exists (el) {
-    return !!el;
-}
-
-function visible (el) {
-    if (!domUtils.isDomElement(el) && !domUtils.isTextNode(el))
-        return false;
-
-    if (domUtils.isOptionElement(el) || domUtils.getTagName(el) === 'optgroup')
-        return selectElementUI.isOptionElementVisible(el);
-
-    return positionUtils.isElementVisible(el);
-}
 
 export default class SelectorExecutor extends ClientFunctionExecutor {
     constructor (command, globalTimeout, startTime, createNotFoundError, createIsInvisibleError) {
@@ -31,14 +22,15 @@ export default class SelectorExecutor extends ClientFunctionExecutor {
         this.createIsInvisibleError = createIsInvisibleError;
         this.timeout                = typeof command.timeout === 'number' ? command.timeout : globalTimeout;
         this.counterMode            = this.dependencies.filterOptions.counterMode;
+        this.getVisibleValueMode    = this.dependencies.filterOptions.getVisibleValueMode;
 
         if (startTime) {
-            var elapsed = new Date() - startTime;
+            const elapsed = new DateCtor() - startTime;
 
             this.timeout = Math.max(this.timeout - elapsed, 0);
         }
 
-        var customDOMProperties = this.dependencies && this.dependencies.customDOMProperties;
+        const customDOMProperties = this.dependencies && this.dependencies.customDOMProperties;
 
         this.replicator.addTransforms([new SelectorNodeTransform(customDOMProperties)]);
     }
@@ -49,52 +41,53 @@ export default class SelectorExecutor extends ClientFunctionExecutor {
         ]);
     }
 
-    _checkElement (el, startTime, condition, createTimeoutError, reCheck) {
-        if (condition(el))
-            return el;
+    _getTimeoutErrorParams () {
+        const apiFnIndex = window['%testCafeSelectorFilter%'].error;
+        const apiFnChain = this.command.apiFnChain;
 
-        var isTimeout = new Date() - startTime >= this.timeout;
+        if (typeof apiFnIndex !== 'undefined')
+            return { apiFnIndex, apiFnChain };
 
-        if (isTimeout) {
-            if (createTimeoutError)
-                throw createTimeoutError();
-
-            return null;
-        }
-
-        return delay(CHECK_ELEMENT_DELAY).then(reCheck);
+        return null;
     }
 
-    _ensureExists (args, startTime) {
-        var reCheck = () => this._ensureExists(args, startTime);
+    _getTimeoutError (elementExists) {
+        return elementExists ? this.createIsInvisibleError : this.createNotFoundError;
+    }
 
+    _validateElement (args, startTime) {
         return Promise.resolve()
             .then(() => this.fn.apply(window, args))
-            .then(el => this._checkElement(el, startTime, exists, this.createNotFoundError, reCheck));
-    }
+            .then(el => {
+                const isElementExists    = exists(el);
+                const isElementVisible   = !this.command.visibilityCheck || visible(el);
+                const isTimeout          = new DateCtor() - startTime >= this.timeout;
 
-    _ensureVisible (el, startTime) {
-        var reCheck = () => this._ensureVisible(el, startTime);
+                if (isElementExists && (isElementVisible || domUtils.isShadowRoot(el)))
+                    return el;
 
-        return this._checkElement(el, startTime, visible, this.createIsInvisibleError, reCheck);
+                if (!isTimeout)
+                    return delay(CHECK_ELEMENT_DELAY).then(() => this._validateElement(args, startTime));
+
+                const createTimeoutError = this.getVisibleValueMode ? null : this._getTimeoutError(isElementExists);
+
+                if (createTimeoutError)
+                    throw createTimeoutError(this._getTimeoutErrorParams());
+
+                return null;
+            });
     }
 
     _executeFn (args) {
         if (this.counterMode)
             return super._executeFn(args);
 
-        var startTime = new Date();
-        var error     = null;
-        var element   = null;
+        const startTime = new DateCtor();
+        let error       = null;
+        let element     = null;
 
         return this
-            ._ensureExists(args, startTime)
-            .then(el => {
-                if (el && this.command.visibilityCheck)
-                    return this._ensureVisible(el, startTime);
-
-                return el;
-            })
+            ._validateElement(args, startTime)
             .catch(err => {
                 error = err;
             })

@@ -1,21 +1,21 @@
 import TestFileCompilerBase from '../base';
 import { GeneralError } from '../../../errors/runtime';
-import MESSAGE from '../../../errors/runtime/message';
+import { RUNTIME_ERRORS } from '../../../errors/types';
 import TestFile from '../../../api/structure/test-file';
 import Fixture from '../../../api/structure/fixture';
 import Test from '../../../api/structure/test';
 import createCommandFromObject from '../../../test-run/commands/from-object';
 
-
 export default class RawTestFileCompiler extends TestFileCompilerBase {
     static _createTestFn (commands) {
         return async t => {
-            for (var i = 0; i < commands.length; i++) {
-                var callsite = commands[i] && commands[i].callsite;
-                var command  = null;
+            for (let i = 0; i < commands.length; i++) {
+                const callsite = commands[i] && commands[i].callsite;
+                let command  = null;
 
                 try {
-                    command = createCommandFromObject(commands[i]);
+                    command = createCommandFromObject(commands[i], t.testRun);
+
                     await t.testRun.executeCommand(command, callsite);
                 }
                 catch (err) {
@@ -39,11 +39,17 @@ export default class RawTestFileCompiler extends TestFileCompilerBase {
 
         if (src.skip)
             dest.skip;
+
+        if (src.disablePageReloads)
+            dest.disablePageReloads;
+
+        if (src.enablePageReloads)
+            dest.enablePageReloads;
         /* eslint-enable no-unused-expressions */
     }
 
     static _addTest (testFile, src) {
-        var test = new Test(testFile);
+        const test = new Test(testFile);
 
         test(src.name, RawTestFileCompiler._createTestFn(src.commands));
 
@@ -59,7 +65,7 @@ export default class RawTestFileCompiler extends TestFileCompilerBase {
     }
 
     static _addFixture (testFile, src) {
-        var fixture = new Fixture(testFile);
+        const fixture = new Fixture(testFile);
 
         fixture(src.name);
 
@@ -83,8 +89,9 @@ export default class RawTestFileCompiler extends TestFileCompilerBase {
     }
 
     compile (code, filename) {
-        var data     = null;
-        var testFile = new TestFile(filename);
+        const testFile = new TestFile(filename);
+
+        let data = null;
 
         try {
             data = JSON.parse(code);
@@ -94,7 +101,7 @@ export default class RawTestFileCompiler extends TestFileCompilerBase {
             return testFile.getTests();
         }
         catch (err) {
-            throw new GeneralError(MESSAGE.cannotParseRawFile, filename, err.toString());
+            throw new GeneralError(RUNTIME_ERRORS.cannotParseRawFile, filename, err.toString());
         }
     }
 }

@@ -11,7 +11,7 @@
     <script src="/legacy-runner.js" class="script-hammerhead-shadow-ui"></script>
     <script src="/jquery.js" class="script-hammerhead-shadow-ui"></script>
 
-    <link type="text/css" rel=stylesheet href="/ui.css" class="ui-stylesheet-hammerhead-shadow-ui">
+    <link type="text/css" rel=stylesheet href="/styles.css" class="ui-stylesheet-hammerhead-shadow-ui">
 </head>
 <body>
 <script type="text/javascript">
@@ -21,19 +21,21 @@
 
 
     //Hammerhead setup
-    var hammerhead = getTestCafeModule('hammerhead');
+    const hammerhead  = getTestCafeModule('hammerhead');
+    const INSTRUCTION = hammerhead.PROCESSING_INSTRUCTIONS.dom.script;
 
-    hammerhead.get('./utils/destination-location').forceLocation('http://localhost/sessionId/https://example.com');
+
+    hammerhead.utils.destLocation.forceLocation('http://localhost/sessionId/https://example.com');
 
     hammerhead.start({ sessionId: 'sessionId' });
 
-    var testCafeLegacyRunner = getTestCafeModule('testCafeLegacyRunner');
-    var sandboxedJQuery      = testCafeLegacyRunner.get('./sandboxed-jquery');
-    var iframeDispatcher     = testCafeLegacyRunner.get('./iframe-dispatcher');
+    const testCafeLegacyRunner = getTestCafeModule('testCafeLegacyRunner');
+    const sandboxedJQuery      = testCafeLegacyRunner.get('./sandboxed-jquery');
+    const iframeDispatcher     = testCafeLegacyRunner.get('./iframe-dispatcher');
 
     sandboxedJQuery.init(window);
 
-    var act          = null,
+    let act          = null,
         ok           = null,
         notOk        = null,
         eq           = null,
@@ -82,7 +84,7 @@
         window.loadedTime = Date.now();
 
         $('#button').click(function () {
-            window.top.postMessage(JSON.stringify({ type: "clickRaised" }), "*");
+            window[INSTRUCTION.callMethod](top, 'postMessage', [JSON.stringify({ type: "clickRaised" }), '*']);
         });
 
         $('#errorButton').click(function () {

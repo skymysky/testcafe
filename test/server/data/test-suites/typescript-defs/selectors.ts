@@ -455,6 +455,19 @@ test('Selector "withText" method', async() => {
     expect(await elWithClass('idxEl').withText('element 1.').id).eql('el1');
 });
 
+test('Selector "withExactText" method', async() => {
+    let selector  = Selector('#el5 div');
+
+    expect(await selector.withText('Element with text').count).eql(6);
+
+    selector = selector.withExactText('Element with text');
+
+    expect(await selector.count).eql(3);
+    expect(await selector.nth(0).id).eql('passed-0');
+    expect(await selector.nth(1).id).eql('passed-1');
+    expect(await selector.nth(2).id).eql('passed-2');
+});
+
 test('Selector "filter" method', async() => {
     // String filter
     expect(await Selector('body div').filter('#htmlElementWithInnerText').id).eql('htmlElementWithInnerText');
@@ -504,7 +517,7 @@ test('Combination of filter methods', async t => {
     expect(el.id).eql('el4');
 
     // Selector should maintain filter when used as parameter
-    const getId = ClientFunction(getEl => getEl().id);
+    const getId = ClientFunction((getEl: Function) => getEl().id);
 
     let id = await getId(selector);
 
@@ -514,6 +527,24 @@ test('Combination of filter methods', async t => {
     id = await t.eval(() => selector().id, {dependencies: {selector: selector.nth(0)}});
 
     expect(id).eql('el2');
+});
+
+test('Selector `filterVisible/filterHidden` methods with hierarchical structure', async() => {
+    let elements = Selector('#filterVisibleHierarchical > div');
+
+    expect(await elements.child('p').count).eql(11);
+
+    elements = elements.filterVisible().child('p');
+
+    expect(await elements.count).eql(6);
+    expect(await elements.filterVisible().count).eql(5);
+    expect(await elements.filterVisible().filter('.p').count).eql(2);
+    expect(await elements.filterHidden().count).eql(1);
+
+    elements = Selector('#filterVisibleHierarchical > div').filterHidden().child('p');
+
+    expect(await elements.count).eql(5);
+    expect(await elements.filterHidden().count).eql(5);
 });
 
 test('Selector "find" method', async() => {
@@ -677,30 +708,30 @@ test('Selector "count" and "exists" properties', async() => {
     expect(await Selector('form').find('input').count).eql(2);
     expect(await Selector('.notexists').count).eql(0);
 
-    const witClass = Selector(className => document.getElementsByClassName(className));
+    const withClass = Selector(className => document.getElementsByClassName(className));
 
-    expect(await witClass('idxEl').count).eql(4);
-    expect(await witClass('idxEl').withText('Hey?!').count).eql(2);
+    expect(await withClass('idxEl').count).eql(4);
+    expect(await withClass('idxEl').withText('Hey?!').count).eql(2);
 
     expect(await Selector('.idxEl').exists).to.be.true;
     expect(await Selector('.idxEl').nth(2).exists).to.be.true;
     expect(await Selector('form').find('input').exists).to.be.true;
     expect(await Selector('.notexists').exists).to.be.false;
-    expect(await witClass('idxEl').exists).to.be.true;
-    expect(await witClass('idxEl').withText('Hey?!').exists).to.be.true;
-    expect(await witClass('idxEl').withText('testtesttest').exists).to.be.false;
+    expect(await withClass('idxEl').exists).to.be.true;
+    expect(await withClass('idxEl').withText('Hey?!').exists).to.be.true;
+    expect(await withClass('idxEl').withText('testtesttest').exists).to.be.false;
 });
 
 test('Selector filter dependencies and index argument', async t => {
-    const isOne = ClientFunction(i => i === 1);
-    const isTwo = ClientFunction(i => i === 2);
-    const firstNode = ClientFunction((node, i) => isOne(i));
+    const isOne = ClientFunction((i: number) => i === 1);
+    const isTwo = ClientFunction((i: number) => i === 2);
+    const firstNode = ClientFunction((node: Node, i: number) => isOne(i));
 
     await t
-        .expect(Selector('.idxEl').filter((node, i) => !!isTwo(i), {isTwo}).id).eql('el3')
-        .expect(Selector('.find-parent').find((node, i) => !!isOne(i), {isOne}).id).eql('find-child2')
-        .expect(Selector('#childDiv').parent((node, i) => !!isTwo(i), {isTwo}).id).eql('p2')
-        .expect(Selector('.find-parent').child((node, i) => !!isOne(i), {isOne}).id).eql('find-child3');
+        .expect(Selector('.idxEl').filter((node: Node, i: number) => !!isTwo(i), {isTwo}).id).eql('el3')
+        .expect(Selector('.find-parent').find((node: Node, i: number) => !!isOne(i), {isOne}).id).eql('find-child2')
+        .expect(Selector('#childDiv').parent((node: Node, i: number) => !!isTwo(i), {isTwo}).id).eql('p2')
+        .expect(Selector('.find-parent').child((node: Node, i: number) => !!isOne(i), {isOne}).id).eql('find-child3');
 });
 
 test('Selector filter origin node argument', async t => {
@@ -887,4 +918,23 @@ test('hasAttribute method', async t => {
     await t
         .expect(sel.hasAttribute('id')).notOk()
         .expect(el.hasAttribute).eql(void 0);
+});
+
+test('Correct return types for Selector filters', async () => {
+    await Selector('div').withAttribute('data', 'data')();
+    await Selector('div').nth(0)();
+    await Selector('div').with({ timeout: 5000 })();
+    await Selector('div').addCustomDOMProperties({ prop: el => el.tagName })();
+    await Selector('div').addCustomMethods({ meth: el => el.tagName })();
+    await Selector('div').prevSibling()();
+    await Selector('div').nextSibling()();
+    await Selector('div').sibling()();
+    await Selector('div').child()();
+    await Selector('div').parent()();
+    await Selector('div').find('span')();
+    await Selector('div').filterHidden()();
+    await Selector('div').filterVisible()();
+    await Selector('div').filter('span')();
+    await Selector('div').withExactText('text')();
+    await Selector('div').withText('text')();
 });

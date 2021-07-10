@@ -1,52 +1,82 @@
 import TYPE from './type';
-import Assignable from '../../utils/assignable';
-import { ResizeToFitDeviceOptions } from './options';
+import CommandBase from './base';
+import { ElementScreenshotOptions, ResizeToFitDeviceOptions } from './options';
+import { initSelector } from './validations/initializers';
 
 import {
+    booleanArgument,
     positiveIntegerArgument,
-    nonEmptyStringArgument,
+    screenshotPathArgument,
     resizeWindowDeviceArgument,
     actionOptions
 } from './validations/argument';
 
+import { generateScreenshotMark } from '../../screenshots/utils';
 
 function initResizeToFitDeviceOptions (name, val) {
     return new ResizeToFitDeviceOptions(val, true);
 }
 
+function initElementScreenshotOptions (name, val) {
+    return new ElementScreenshotOptions(val, true);
+}
+
 // Commands
-export class TakeScreenshotCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
+export class TakeScreenshotBaseCommand extends CommandBase {
+    constructor (obj, testRun, type) {
+        super(obj, testRun, type);
 
-        this.type = TYPE.takeScreenshot;
-        this.path = '';
+        this.markSeed = null;
+        this.markData = '';
+    }
 
-        this._assignFrom(obj, true);
+    generateScreenshotMark () {
+        Object.assign(this, generateScreenshotMark());
+    }
+}
+
+export class TakeScreenshotCommand extends TakeScreenshotBaseCommand {
+    constructor (obj, testRun) {
+        super(obj, testRun, TYPE.takeScreenshot);
     }
 
     _getAssignableProperties () {
         return [
-            { name: 'path', type: nonEmptyStringArgument }
+            { name: 'path', type: screenshotPathArgument, defaultValue: '' },
+            { name: 'fullPage', type: booleanArgument, defaultValue: void 0 }
         ];
     }
 }
 
-export class TakeScreenshotOnFailCommand {
-    constructor () {
-        this.type = TYPE.takeScreenshotOnFail;
+export class TakeElementScreenshotCommand extends TakeScreenshotBaseCommand {
+    constructor (obj, testRun) {
+        super(obj, testRun, TYPE.takeElementScreenshot);
+    }
+
+    _getAssignableProperties () {
+        return [
+            { name: 'selector', init: initSelector, required: true },
+            { name: 'options', init: initElementScreenshotOptions, required: true },
+            { name: 'path', type: screenshotPathArgument, defaultValue: '' }
+        ];
     }
 }
 
-export class ResizeWindowCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
+export class TakeScreenshotOnFailCommand extends TakeScreenshotBaseCommand {
+    constructor (obj, testRun) {
+        super(obj, testRun, TYPE.takeScreenshotOnFail);
+    }
 
-        this.type   = TYPE.resizeWindow;
-        this.width  = 0;
-        this.height = 0;
+    _getAssignableProperties () {
+        return [
+            { name: 'fullPage', type: booleanArgument, defaultValue: false }
+        ];
+    }
+}
 
-        this._assignFrom(obj, true);
+export class ResizeWindowCommand extends CommandBase {
+    constructor (obj, testRun) {
+        super(obj, testRun, TYPE.resizeWindow);
     }
 
     _getAssignableProperties () {
@@ -57,15 +87,9 @@ export class ResizeWindowCommand extends Assignable {
     }
 }
 
-export class ResizeWindowToFitDeviceCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type    = TYPE.resizeWindowToFitDevice;
-        this.device  = null;
-        this.options = null;
-
-        this._assignFrom(obj, true);
+export class ResizeWindowToFitDeviceCommand extends CommandBase {
+    constructor (obj, testRun) {
+        super(obj, testRun, TYPE.resizeWindowToFitDevice);
     }
 
     _getAssignableProperties () {

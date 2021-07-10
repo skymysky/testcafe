@@ -13,7 +13,7 @@ test('.eql() assertion', async t => {
 
 test('.notEql() assertion', async t => {
     await t
-        .expect({b: 3}).notEql({a: 2})
+        .expect({b: 3}).notEql({b: 4})
         .expect(2).notEql(2);
 });
 
@@ -32,26 +32,38 @@ test('.notOk() assertion', async t => {
 test('.contains() assertion', async t => {
     await t
         .expect('heyyo').contains('hey')
-        .expect([1, 2, 3]).contains(4);
+        .expect([1, 2, 3]).contains([4]);
 });
 
 test('.notContains() assertion', async t => {
     await t
-        .expect([1, 2, 3]).notContains(4)
+        .expect([1, 2, 3]).notContains([4])
         .expect('answer42').notContains('42');
 });
 
 test('.typeOf() assertion', async t => {
     await t
+        .expect(() => true).typeOf('function')
+        .expect({}).typeOf('object')
+        .expect(1).typeOf('number')
+        .expect('string').typeOf('string')
+        .expect(true).typeOf('boolean')
         .expect(void 0).typeOf('undefined')
-        .expect('hey').typeOf('string')
+        .expect(null).typeOf('null')
+        .expect(new RegExp('regex')).typeOf('regexp')
         .expect(42).typeOf('function');
 });
 
 test('.notTypeOf() assertion', async t => {
     await t
-        .expect(void 0).notTypeOf('string')
-        .expect('hey').notTypeOf('number')
+        .expect('function').notTypeOf('function')
+        .expect('object').notTypeOf('object')
+        .expect('number').notTypeOf('number')
+        .expect(1).notTypeOf('string')
+        .expect('boolean').notTypeOf('boolean')
+        .expect('undefined').notTypeOf('undefined')
+        .expect('null').notTypeOf('null')
+        .expect('regex').notTypeOf('regexp')
         .expect(42).notTypeOf('number');
 });
 
@@ -143,9 +155,9 @@ test('.notMatch() assertion', async t => {
 });
 
 test('ClientFunction result assertion', async t => {
-    const getSomeVar = ClientFunction(() => window.location);
+    const getSomeVar = ClientFunction(() => window.location.toString());
 
-    await t.expect(getSomeVar()).eql(2);
+    await t.expect(getSomeVar()).eql('https://example.com');
 });
 
 
@@ -216,7 +228,7 @@ test('Get UA', async t => {
     throw await t.eval(() => navigator.userAgent);
 });
 
-const getById = ClientFunction(id => document.getElementById(id));
+const getById = ClientFunction((id: string) => document.getElementById(id));
 
 
 test('Eval with dependencies', async t => {
@@ -463,7 +475,7 @@ test('Expected confirm after an action', async t => {
 });
 
 test('Expected confirm after an action (with dependencies)', async t => {
-    var dialogHandler = ClientFunction((type, text) => {
+    var dialogHandler = ClientFunction((type: string, text: string) => {
         if (type === 'confirm' && text === 'Confirm?')
             return true;
 
@@ -478,7 +490,7 @@ test('Expected confirm after an action (with dependencies)', async t => {
 });
 
 test('Expected confirm after an action (client function)', async t => {
-    var dialogHandler = ClientFunction((type, text) => {
+    var dialogHandler = ClientFunction((type: string, text: string) => {
         if (type === 'confirm' && text === 'Confirm?')
             return true;
 
@@ -781,4 +793,54 @@ test('messages formatting', async t => {
         .expect(messages.info.length).eql(0)
         .expect(messages.warn.length).eql(0)
         .expect(messages.error.length).eql(0);
+});
+
+test('action result coercion', async t => {
+    function test (): Promise<void> {
+        return t.expect(1).ok();
+    }
+
+    test();
+});
+
+test('scroll methods', async t => {
+    const target = Selector('#target');
+
+    await t.scroll(100, 500);
+    await t.scroll(target, 100, 500);
+    await t.scroll('top');
+    await t.scroll('left');
+    await t.scroll('right');
+    await t.scroll('bottom');
+    await t.scroll('topLeft');
+    await t.scroll('topRight');
+    await t.scroll('bottomLeft');
+    await t.scroll('bottomRight');
+    await t.scroll('center');
+    await t.scroll(target, 'top');
+    await t.scroll(target, 'left');
+    await t.scroll(target, 'right');
+    await t.scroll(target, 'bottom');
+    await t.scroll(target, 'topLeft');
+    await t.scroll(target, 'topRight');
+    await t.scroll(target, 'bottomLeft');
+    await t.scroll(target, 'bottomRight');
+    await t.scroll(target, 'center');
+    await t.scrollBy(1, 2);
+    await t.scrollBy(-1, -2);
+    await t.scrollBy(target, 1, 2);
+    await t.scrollBy(target, -1, -2);
+    await t.scrollIntoView(target);
+
+    await t.scroll(target, 100, 200, { offsetX: 1, offsetY: 1 });
+    await t.scroll(target, 'top', { offsetX: 1, offsetY: 1 });
+    await t.scrollBy(target, 100, 200, { offsetX: -1, offsetY: -1 });
+    await t.scrollIntoView(target, { offsetX: 1, offsetY: 1 });
+});
+
+test('dispatch', async t => {
+    const target = Selector('#target');
+
+    await t.dispatchEvent(target, 'mousedown');
+    await t.dispatchEvent(target, 'mousedown', { button: 1 });
 });

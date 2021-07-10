@@ -1,5 +1,7 @@
 *
-!bin
 !docker
-!lib
-!package.json
+!gulp
+!test
+!Gulpfile.js
+!.publishrc
+!*.tgz

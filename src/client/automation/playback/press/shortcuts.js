@@ -1,22 +1,23 @@
 import hammerhead from '../../deps/hammerhead';
 import testCafeCore from '../../deps/testcafe-core';
 import testCafeUI from '../../deps/testcafe-ui';
-import { setValue } from '../../utils/utils';
 
-var Promise               = hammerhead.Promise;
-var browserUtils          = hammerhead.utils.browser;
-var eventSimulator        = hammerhead.eventSandbox.eventSimulator;
-var focusBlurSandbox      = hammerhead.eventSandbox.focusBlur;
-var elementEditingWatcher = hammerhead.eventSandbox.elementEditingWatcher;
+import SHORTCUT_TYPE from './shortcut-type';
+import { focusNextElement } from './utils';
 
-var textSelection = testCafeCore.textSelection;
-var eventUtils    = testCafeCore.eventUtils;
-var domUtils      = testCafeCore.domUtils;
-var selectElement = testCafeUI.selectElement;
+const Promise               = hammerhead.Promise;
+const browserUtils          = hammerhead.utils.browser;
+const eventSimulator        = hammerhead.eventSandbox.eventSimulator;
+const elementEditingWatcher = hammerhead.eventSandbox.elementEditingWatcher;
+
+const textSelection = testCafeCore.textSelection;
+const eventUtils    = testCafeCore.eventUtils;
+const domUtils      = testCafeCore.domUtils;
+const selectElement = testCafeUI.selectElement;
 
 
-var currentTextarea             = null;
-var currentTextareaCursorIndent = null;
+let currentTextarea             = null;
+let currentTextareaCursorIndent = null;
 
 function onTextAreaBlur () {
     currentTextarea             = null;
@@ -37,58 +38,59 @@ function updateTextAreaIndent (element) {
 }
 
 function getLineIndentInTextarea (textarea) {
-    var inverseSelection = textSelection.hasInverseSelection(textarea);
+    const inverseSelection = textSelection.hasInverseSelection(textarea);
+    const textareaValue    = domUtils.getTextAreaValue(textarea);
 
-    var cursorPosition = inverseSelection ?
-                         textSelection.getSelectionStart(textarea) :
-                         textSelection.getSelectionEnd(textarea);
+    const cursorPosition = inverseSelection ?
+        textSelection.getSelectionStart(textarea) :
+        textSelection.getSelectionEnd(textarea);
 
-    if (!textarea.value || !cursorPosition)
+    if (!textareaValue || !cursorPosition)
         return 0;
 
     return domUtils.getTextareaIndentInLine(textarea, cursorPosition);
 }
 
 function moveTextAreaCursorUp (element, withSelection) {
-    var textareaValue = element.value;
+    const textareaValue = domUtils.getTextAreaValue(element);
 
     if (!textareaValue)
         return;
 
-    var startPos                = textSelection.getSelectionStart(element);
-    var endPos                  = textSelection.getSelectionEnd(element);
-    var hasInverseSelection     = textSelection.hasInverseSelection(element);
-    var partBeforeCursor        = textareaValue.substring(0, hasInverseSelection ? startPos : endPos);
-    var lastLineBreakIndex      = partBeforeCursor.lastIndexOf('\n');
-    var partBeforeLastLineBreak = partBeforeCursor.substring(0, lastLineBreakIndex);
+    const startPos                = textSelection.getSelectionStart(element);
+    const endPos                  = textSelection.getSelectionEnd(element);
+    const hasInverseSelection     = textSelection.hasInverseSelection(element);
+    const partBeforeCursor        = textareaValue.substring(0, hasInverseSelection ? startPos : endPos);
+    let lastLineBreakIndex      = partBeforeCursor.lastIndexOf('\n');
+    const partBeforeLastLineBreak = partBeforeCursor.substring(0, lastLineBreakIndex);
 
     if (currentTextareaCursorIndent === null || currentTextarea !== element)
         updateTextAreaIndent(element);
 
     lastLineBreakIndex = partBeforeLastLineBreak.lastIndexOf('\n');
-    var newPosition    = Math.min(lastLineBreakIndex + 1 + currentTextareaCursorIndent, partBeforeLastLineBreak.length);
+    const newPosition    = Math.min(lastLineBreakIndex + 1 + currentTextareaCursorIndent, partBeforeLastLineBreak.length);
 
     moveTextAreaCursor(element, startPos, endPos, hasInverseSelection, newPosition, withSelection);
 }
 
 function moveTextAreaCursorDown (element, withSelection) {
-    var textareaValue = element.value;
+    const textareaValue = domUtils.getTextAreaValue(element);
 
     if (!textareaValue)
         return;
 
-    var startPos            = textSelection.getSelectionStart(element);
-    var endPos              = textSelection.getSelectionEnd(element);
-    var hasInverseSelection = textSelection.hasInverseSelection(element);
-    var cursorPosition      = hasInverseSelection ? startPos : endPos;
-    var partAfterCursor     = textareaValue.substring(cursorPosition);
-    var firstLineBreakIndex = partAfterCursor.indexOf('\n');
-    var nextLineStartIndex  = firstLineBreakIndex === -1 ? partAfterCursor.length : firstLineBreakIndex + 1;
-    var partAfterNewIndent  = partAfterCursor.substring(nextLineStartIndex);
-    var newPosition         = cursorPosition + nextLineStartIndex;
+    const startPos            = textSelection.getSelectionStart(element);
+    const endPos              = textSelection.getSelectionEnd(element);
+    const hasInverseSelection = textSelection.hasInverseSelection(element);
+    const cursorPosition      = hasInverseSelection ? startPos : endPos;
+    const partAfterCursor     = textareaValue.substring(cursorPosition);
+    let firstLineBreakIndex = partAfterCursor.indexOf('\n');
+    const nextLineStartIndex  = firstLineBreakIndex === -1 ? partAfterCursor.length : firstLineBreakIndex + 1;
+    const partAfterNewIndent  = partAfterCursor.substring(nextLineStartIndex);
+    let newPosition         = cursorPosition + nextLineStartIndex;
 
     firstLineBreakIndex = partAfterNewIndent.indexOf('\n');
-    var maxIndent       = firstLineBreakIndex === -1 ? partAfterNewIndent.length : firstLineBreakIndex;
+    const maxIndent       = firstLineBreakIndex === -1 ? partAfterNewIndent.length : firstLineBreakIndex;
 
     if (currentTextareaCursorIndent === null || currentTextarea !== element)
         updateTextAreaIndent(element);
@@ -99,8 +101,8 @@ function moveTextAreaCursorDown (element, withSelection) {
 }
 
 function moveTextAreaCursor (element, startPos, endPos, hasInverseSelection, newPosition, withSelection) {
-    var newStart = null;
-    var newEnd   = null;
+    let newStart = null;
+    let newEnd   = null;
 
     if (withSelection) {
         if (startPos === endPos) {
@@ -131,16 +133,16 @@ function setElementValue (element, value, position) {
             value = value.substring(0, value.length - 1);
     }
 
-    setValue(element, value);
+    domUtils.setElementValue(element, value);
 
     textSelection.select(element, position, position);
     eventSimulator.input(element);
 }
 
 function submitFormOnEnterPressInInput (form, inputElement) {
-    var buttons      = form.querySelectorAll('input, button');
-    var submitButton = null;
-    var i            = null;
+    const buttons      = form.querySelectorAll('input, button');
+    let submitButton = null;
+    let i            = null;
 
     for (i = 0; i < buttons.length; i++) {
         if (!submitButton && buttons[i].type === 'submit' && !buttons[i].disabled) {
@@ -152,8 +154,8 @@ function submitFormOnEnterPressInInput (form, inputElement) {
     if (submitButton)
         eventSimulator.click(submitButton);
     else if (domUtils.blocksImplicitSubmission(inputElement)) {
-        var formInputs = form.getElementsByTagName('input');
-        var textInputs = [];
+        const formInputs = form.getElementsByTagName('input');
+        const textInputs = [];
 
         for (i = 0; i < formInputs.length; i++) {
             if (domUtils.blocksImplicitSubmission(formInputs[i]))
@@ -163,7 +165,7 @@ function submitFormOnEnterPressInInput (form, inputElement) {
         // NOTE: the form is submitted on enter press if there is only one input of the following types on it
         //  and this input is focused (http://www.w3.org/TR/html5/forms.html#implicit-submission)
         if (textInputs.length === 1 && textInputs[0] === inputElement) {
-            var isInputValid = browserUtils.isSafari || !inputElement.validity || inputElement.validity.valid;
+            const isInputValid = inputElement.validity.valid;
 
             if (isInputValid && eventSimulator.submit(form))
                 form.submit();
@@ -181,9 +183,9 @@ function selectAll (element) {
 
 function backspace (element) {
     if (domUtils.isTextEditableElementAndEditingAllowed(element)) {
-        var startPos = textSelection.getSelectionStart(element);
-        var endPos   = textSelection.getSelectionEnd(element);
-        var value    = element.value.replace(/\r\n/g, '\n');
+        const startPos = textSelection.getSelectionStart(element);
+        const endPos   = textSelection.getSelectionEnd(element);
+        const value    = domUtils.getElementValue(element).replace(/\r\n/g, '\n');
 
         if (endPos === startPos) {
             if (startPos > 0) {
@@ -203,9 +205,9 @@ function backspace (element) {
 
 function del (element) {
     if (domUtils.isTextEditableElementAndEditingAllowed(element)) {
-        var startPos = textSelection.getSelectionStart(element);
-        var endPos   = textSelection.getSelectionEnd(element);
-        var value    = element.value.replace(/\r\n/g, '\n');
+        const startPos = textSelection.getSelectionStart(element);
+        const endPos   = textSelection.getSelectionEnd(element);
+        const value    = domUtils.getElementValue(element).replace(/\r\n/g, '\n');
 
         if (endPos === startPos) {
             if (startPos < value.length) {
@@ -226,17 +228,20 @@ function del (element) {
 }
 
 function left (element) {
-    var startPosition = null;
-    var endPosition   = null;
+    let startPosition = null;
+    let endPosition   = null;
 
     if (domUtils.isSelectElement(element))
         selectElement.switchOptionsByKeys(element, 'left');
+
+    if (isRadioButtonNavigationRequired(element))
+        return focusAndCheckNextRadioButton(element, true);
 
     if (domUtils.isTextEditableElement(element)) {
         startPosition = textSelection.getSelectionStart(element) || 0;
         endPosition   = textSelection.getSelectionEnd(element);
 
-        var newPosition = startPosition === endPosition ? startPosition - 1 : startPosition;
+        const newPosition = startPosition === endPosition ? startPosition - 1 : startPosition;
 
         textSelection.select(element, newPosition, newPosition);
         updateTextAreaIndent(element);
@@ -248,11 +253,11 @@ function left (element) {
 
         // NOTE: we only remove selection
         if (startPosition !== endPosition) {
-            var selection        = textSelection.getSelectionByElement(element);
-            var inverseSelection = textSelection.hasInverseSelectionContentEditable(element);
-            var startNode        = inverseSelection ? selection.focusNode : selection.anchorNode;
-            var startOffset      = inverseSelection ? selection.focusOffset : selection.anchorOffset;
-            var startPos         = { node: startNode, offset: startOffset };
+            const selection        = textSelection.getSelectionByElement(element);
+            const inverseSelection = textSelection.hasInverseSelectionContentEditable(element);
+            const startNode        = inverseSelection ? selection.focusNode : selection.anchorNode;
+            const startOffset      = inverseSelection ? selection.focusOffset : selection.anchorOffset;
+            const startPos         = { node: startNode, offset: startOffset };
 
             textSelection.selectByNodesAndOffsets(startPos, startPos, true);
         }
@@ -262,19 +267,22 @@ function left (element) {
 }
 
 function right (element) {
-    var startPosition = null;
-    var endPosition   = null;
+    let startPosition = null;
+    let endPosition   = null;
 
     if (domUtils.isSelectElement(element))
         selectElement.switchOptionsByKeys(element, 'right');
+
+    if (isRadioButtonNavigationRequired(element))
+        return focusAndCheckNextRadioButton(element, false);
 
     if (domUtils.isTextEditableElement(element)) {
         startPosition = textSelection.getSelectionStart(element);
         endPosition   = textSelection.getSelectionEnd(element);
 
-        var newPosition = startPosition === endPosition ? endPosition + 1 : endPosition;
+        let newPosition = startPosition === endPosition ? endPosition + 1 : endPosition;
 
-        if (startPosition === element.value.length)
+        if (startPosition === domUtils.getElementValue(element).length)
             newPosition = startPosition;
 
         textSelection.select(element, newPosition, newPosition);
@@ -287,11 +295,11 @@ function right (element) {
 
         //NOTE: we only remove selection
         if (startPosition !== endPosition) {
-            var selection        = textSelection.getSelectionByElement(element);
-            var inverseSelection = textSelection.hasInverseSelectionContentEditable(element);
-            var endNode          = inverseSelection ? selection.anchorNode : selection.focusNode;
-            var endOffset        = inverseSelection ? selection.anchorOffset : selection.focusOffset;
-            var startPos         = { node: endNode, offset: endOffset };
+            const selection        = textSelection.getSelectionByElement(element);
+            const inverseSelection = textSelection.hasInverseSelectionContentEditable(element);
+            const endNode          = inverseSelection ? selection.anchorNode : selection.focusNode;
+            const endOffset        = inverseSelection ? selection.anchorOffset : selection.focusOffset;
+            const startPos         = { node: endNode, offset: endOffset };
 
             textSelection.selectByNodesAndOffsets(startPos, startPos, true);
         }
@@ -303,6 +311,9 @@ function right (element) {
 function up (element) {
     if (domUtils.isSelectElement(element))
         selectElement.switchOptionsByKeys(element, 'up');
+
+    if (isRadioButtonNavigationRequired(element))
+        return focusAndCheckNextRadioButton(element, true);
 
     if (browserUtils.isWebKit && domUtils.isInputElement(element))
         return home(element);
@@ -317,6 +328,9 @@ function down (element) {
     if (domUtils.isSelectElement(element))
         selectElement.switchOptionsByKeys(element, 'down');
 
+    if (isRadioButtonNavigationRequired(element))
+        return focusAndCheckNextRadioButton(element, false);
+
     if (browserUtils.isWebKit && domUtils.isInputElement(element))
         return end(element);
 
@@ -328,13 +342,13 @@ function down (element) {
 
 function home (element, withSelection) {
     if (domUtils.isTextEditableElement(element)) {
-        var startPos          = textSelection.getSelectionStart(element);
-        var endPos            = textSelection.getSelectionEnd(element);
-        var inverseSelection  = textSelection.hasInverseSelection(element);
-        var referencePosition = null;
+        const startPos          = textSelection.getSelectionStart(element);
+        const endPos            = textSelection.getSelectionEnd(element);
+        const inverseSelection  = textSelection.hasInverseSelection(element);
+        let referencePosition = null;
 
-        var isSingleLineSelection = !domUtils.isTextAreaElement(element) ? true :
-                                    domUtils.getTextareaLineNumberByPosition(element, startPos) ===
+        const isSingleLineSelection = !domUtils.isTextAreaElement(element) ? true :
+            domUtils.getTextareaLineNumberByPosition(element, startPos) ===
                                     domUtils.getTextareaLineNumberByPosition(element, endPos);
 
         if (isSingleLineSelection)
@@ -342,11 +356,11 @@ function home (element, withSelection) {
         else
             referencePosition = inverseSelection ? startPos : endPos;
 
-        var valueBeforeCursor  = element.value.substring(0, referencePosition);
-        var lastLineBreakIndex = valueBeforeCursor.lastIndexOf('\n');
-        var newPosition        = lastLineBreakIndex === -1 ? 0 : lastLineBreakIndex + 1;
-        var newStartPos        = null;
-        var newEndPos          = null;
+        const valueBeforeCursor  = domUtils.getElementValue(element).substring(0, referencePosition);
+        const lastLineBreakIndex = valueBeforeCursor.lastIndexOf('\n');
+        const newPosition        = lastLineBreakIndex === -1 ? 0 : lastLineBreakIndex + 1;
+        let newStartPos        = null;
+        let newEndPos          = null;
 
         if (isSingleLineSelection) {
             newStartPos = newPosition;
@@ -365,13 +379,13 @@ function home (element, withSelection) {
 
 function end (element, withSelection) {
     if (domUtils.isTextEditableElement(element)) {
-        var startPos          = textSelection.getSelectionStart(element);
-        var endPos            = textSelection.getSelectionEnd(element);
-        var inverseSelection  = textSelection.hasInverseSelection(element);
-        var referencePosition = null;
+        const startPos          = textSelection.getSelectionStart(element);
+        const endPos            = textSelection.getSelectionEnd(element);
+        const inverseSelection  = textSelection.hasInverseSelection(element);
+        let referencePosition = null;
 
-        var isSingleLineSelection = !domUtils.isTextAreaElement(element) ? true :
-                                    domUtils.getTextareaLineNumberByPosition(element, startPos) ===
+        const isSingleLineSelection = !domUtils.isTextAreaElement(element) ? true :
+            domUtils.getTextareaLineNumberByPosition(element, startPos) ===
                                     domUtils.getTextareaLineNumberByPosition(element, endPos);
 
 
@@ -380,11 +394,11 @@ function end (element, withSelection) {
         else
             referencePosition = inverseSelection ? startPos : endPos;
 
-        var valueAsterCursor    = element.value.substring(referencePosition);
-        var firstLineBreakIndex = valueAsterCursor.indexOf('\n');
-        var newPosition         = referencePosition;
-        var newStartPos         = null;
-        var newEndPos           = null;
+        const valueAsterCursor    = domUtils.getElementValue(element).substring(referencePosition);
+        const firstLineBreakIndex = valueAsterCursor.indexOf('\n');
+        let newPosition         = referencePosition;
+        let newStartPos         = null;
+        let newEndPos           = null;
 
         newPosition += firstLineBreakIndex === -1 ? valueAsterCursor.length : firstLineBreakIndex;
 
@@ -432,8 +446,8 @@ function shiftDown (element) {
 
 function shiftLeft (element) {
     if (domUtils.isTextEditableElement(element)) {
-        var startPos = textSelection.getSelectionStart(element);
-        var endPos   = textSelection.getSelectionEnd(element);
+        const startPos = textSelection.getSelectionStart(element);
+        const endPos   = textSelection.getSelectionEnd(element);
 
         if (startPos === endPos || textSelection.hasInverseSelection(element))
             textSelection.select(element, endPos, Math.max(startPos - 1, 0));
@@ -448,13 +462,14 @@ function shiftLeft (element) {
 
 function shiftRight (element) {
     if (domUtils.isTextEditableElement(element)) {
-        var startPos = textSelection.getSelectionStart(element);
-        var endPos   = textSelection.getSelectionEnd(element);
+        const startPos    = textSelection.getSelectionStart(element);
+        const endPos      = textSelection.getSelectionEnd(element);
+        const valueLength = domUtils.getElementValue(element).length;
 
         if (startPos === endPos || !textSelection.hasInverseSelection(element))
-            textSelection.select(element, startPos, Math.min(endPos + 1, element.value.length));
+            textSelection.select(element, startPos, Math.min(endPos + 1, valueLength));
         else
-            textSelection.select(element, endPos, Math.min(startPos + 1, element.value.length));
+            textSelection.select(element, endPos, Math.min(startPos + 1, valueLength));
 
         updateTextAreaIndent(element);
     }
@@ -479,7 +494,7 @@ function enter (element) {
         if (!browserUtils.isIE)
             elementEditingWatcher.processElementChanging(element);
 
-        var form = domUtils.getParents(element, 'form')[0];
+        const form = domUtils.getParents(element, 'form')[0];
 
         // NOTE: if a user presses enter when a form input is focused and the form has
         // a submit button, the browser sends the click event to the submit button
@@ -487,10 +502,11 @@ function enter (element) {
             submitFormOnEnterPressInInput(form, element);
     }
     else if (domUtils.isTextAreaElement(element)) {
-        var startPos          = textSelection.getSelectionStart(element);
-        var valueBeforeCursor = element.value.substring(0, startPos);
-        var valueAfterCursor  = element.value.substring(startPos);
-        var newPosition       = startPos + 1;
+        const startPos          = textSelection.getSelectionStart(element);
+        const value             = domUtils.getTextAreaValue(element);
+        const valueBeforeCursor = value.substring(0, startPos);
+        const valueAfterCursor  = value.substring(startPos);
+        const newPosition       = startPos + 1;
 
         setElementValue(element, valueBeforeCursor + String.fromCharCode(10) + valueAfterCursor, newPosition);
     }
@@ -501,66 +517,52 @@ function enter (element) {
     return Promise.resolve();
 }
 
-function focusNextElement (element) {
-    return new Promise(resolve => {
-        if (domUtils.isSelectElement(element)) {
-            selectElement.collapseOptionList();
-            resolve();
-        }
-
-        var nextElement = domUtils.getNextFocusableElement(element);
-
-        if (!nextElement)
-            resolve();
-
-        focusBlurSandbox.focus(nextElement, () => {
-            if (domUtils.isTextEditableInput(nextElement))
-                textSelection.select(nextElement);
-
-            resolve();
-        });
-    });
+function isRadioButtonNavigationRequired (element) {
+    return domUtils.isRadioButtonElement(element) && !browserUtils.isFirefox;
 }
 
-function focusPrevElement (element) {
-    return new Promise(resolve => {
-        if (domUtils.isSelectElement(element)) {
-            selectElement.collapseOptionList();
-            resolve();
-        }
-
-        var prevElement = domUtils.getNextFocusableElement(element, true);
-
-        if (!prevElement)
-            resolve();
-
-        focusBlurSandbox.focus(prevElement, () => {
-            if (domUtils.isTextEditableInput(prevElement))
-                textSelection.select(prevElement);
-
-            resolve();
+function focusAndCheckNextRadioButton (element, reverse) {
+    return focusNextElementOnNavigationButton(element, reverse, false)
+        .then(focusedElement => {
+            if (focusedElement)
+                focusedElement.checked = true;
         });
-    });
+}
+
+function focusNextElementOnNavigationButton (element, reverse, skipRadioGroups = true) {
+    if (!element)
+        return Promise.resolve();
+
+    if (domUtils.isSelectElement(element))
+        selectElement.collapseOptionList();
+
+
+    return focusNextElement(element, reverse, skipRadioGroups)
+        .then(nextElement => {
+            if (nextElement && domUtils.isTextEditableInput(nextElement))
+                textSelection.select(nextElement);
+            return nextElement;
+        });
 }
 
 export default {
-    'ctrl+a':      selectAll,
-    'backspace':   backspace,
-    'delete':      del,
-    'left':        left,
-    'right':       right,
-    'up':          up,
-    'down':        down,
-    'shift+left':  shiftLeft,
-    'shift+right': shiftRight,
-    'shift+up':    shiftUp,
-    'shift+down':  shiftDown,
-    'shift+home':  shiftHome,
-    'shift+end':   shiftEnd,
-    'home':        home,
-    'end':         end,
-    'enter':       enter,
-    'tab':         focusNextElement,
-    'shift+tab':   focusPrevElement,
-    'esc':         esc
+    [SHORTCUT_TYPE.ctrlA]:      selectAll,
+    [SHORTCUT_TYPE.backspace]:  backspace,
+    [SHORTCUT_TYPE.delete]:     del,
+    [SHORTCUT_TYPE.left]:       left,
+    [SHORTCUT_TYPE.right]:      right,
+    [SHORTCUT_TYPE.up]:         up,
+    [SHORTCUT_TYPE.down]:       down,
+    [SHORTCUT_TYPE.shiftLeft]:  shiftLeft,
+    [SHORTCUT_TYPE.shiftRight]: shiftRight,
+    [SHORTCUT_TYPE.shiftUp]:    shiftUp,
+    [SHORTCUT_TYPE.shiftDown]:  shiftDown,
+    [SHORTCUT_TYPE.shiftHome]:  shiftHome,
+    [SHORTCUT_TYPE.shiftEnd]:   shiftEnd,
+    [SHORTCUT_TYPE.home]:       home,
+    [SHORTCUT_TYPE.end]:        end,
+    [SHORTCUT_TYPE.enter]:      enter,
+    [SHORTCUT_TYPE.tab]:        element => focusNextElementOnNavigationButton(element, false),
+    [SHORTCUT_TYPE.shiftTab]:   element => focusNextElementOnNavigationButton(element, true),
+    [SHORTCUT_TYPE.esc]:        esc
 };

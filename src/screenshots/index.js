@@ -1,59 +1,25 @@
 import { find } from 'lodash';
-import sanitizeFilename from 'sanitize-filename';
 import moment from 'moment';
 import Capturer from './capturer';
+import PathPattern from '../utils/path-pattern';
+import getCommonPath from '../utils/get-common-path';
+import DEFAULT_SCREENSHOT_EXTENSION from './default-extension';
 
 export default class Screenshots {
-    constructor (path) {
-        this.enabled               = !!path;
-        this.screenshotsPath       = path;
-        this.testEntries           = [];
-        this.screenshotBaseDirName = Screenshots._getScreenshotBaseDirName();
-        this.userAgentNames        = [];
-    }
-
-    static _getScreenshotBaseDirName () {
-        var now = Date.now();
-
-        return moment(now).format('YYYY-MM-DD_hh-mm-ss');
-    }
-
-    static _escapeUserAgent (userAgent) {
-        return sanitizeFilename(userAgent.toString()).replace(/\s+/g, '_');
-    }
-
-    _getUsedUserAgent (name, testIndex, quarantineAttemptNum) {
-        var userAgent = null;
-
-        for (var i = 0; i < this.userAgentNames.length; i++) {
-            userAgent = this.userAgentNames[i];
-
-            if (userAgent.name === name && userAgent.testIndex === testIndex &&
-                userAgent.quarantineAttemptNum === quarantineAttemptNum)
-                return userAgent;
-        }
-
-        return null;
-    }
-
-    _getUserAgentName (userAgent, testIndex, quarantineAttemptNum) {
-        var userAgentName = Screenshots._escapeUserAgent(userAgent);
-        var usedUserAgent = this._getUsedUserAgent(userAgentName, testIndex, quarantineAttemptNum);
-
-        if (usedUserAgent) {
-            usedUserAgent.index++;
-            return `${userAgentName}_${usedUserAgent.index}`;
-        }
-
-        this.userAgentNames.push({ name: userAgentName, index: 0, testIndex, quarantineAttemptNum });
-        return userAgentName;
+    constructor ({ enabled, path, pathPattern, fullPage }) {
+        this.enabled            = enabled;
+        this.screenshotsPath    = path;
+        this.screenshotsPattern = pathPattern;
+        this.fullPage           = fullPage;
+        this.testEntries        = [];
+        this.now                = moment();
     }
 
     _addTestEntry (test) {
-        var testEntry = {
-            test:           test,
-            path:           this.screenshotsPath || '',
-            hasScreenshots: false
+        const testEntry = {
+            test:        test,
+            testRuns:    {},
+            screenshots: []
         };
 
         this.testEntries.push(testEntry);
@@ -65,27 +31,47 @@ export default class Screenshots {
         return find(this.testEntries, entry => entry.test === test);
     }
 
-    hasCapturedFor (test) {
-        return this._getTestEntry(test).hasScreenshots;
-    }
-
-    getPathFor (test) {
-        return this._getTestEntry(test).path;
-    }
-
-    createCapturerFor (test, testIndex, quarantineAttemptNum, connection) {
-        var testEntry = this._getTestEntry(test);
+    _ensureTestEntry (test) {
+        let testEntry = this._getTestEntry(test);
 
         if (!testEntry)
             testEntry = this._addTestEntry(test);
 
-        var namingOptions = {
-            testIndex,
-            quarantineAttemptNum,
-            baseDirName:   this.screenshotBaseDirName,
-            userAgentName: this._getUserAgentName(connection.userAgent, testIndex, quarantineAttemptNum)
-        };
+        return testEntry;
+    }
 
-        return new Capturer(this.screenshotsPath, testEntry, connection, namingOptions);
+    getScreenshotsInfo (test) {
+        return this._getTestEntry(test).screenshots;
+    }
+
+    hasCapturedFor (test) {
+        return this.getScreenshotsInfo(test).length > 0;
+    }
+
+    getPathFor (test) {
+        const testEntry       = this._getTestEntry(test);
+        const screenshotPaths = testEntry.screenshots.map(screenshot => screenshot.screenshotPath);
+
+        return getCommonPath(screenshotPaths);
+    }
+
+    createCapturerFor (test, testIndex, quarantine, connection, warningLog) {
+        const testEntry   = this._ensureTestEntry(test);
+        const pathPattern = new PathPattern(this.screenshotsPattern, DEFAULT_SCREENSHOT_EXTENSION, {
+            testIndex,
+            quarantineAttempt: quarantine ? quarantine.getNextAttemptNumber() : null,
+            now:               this.now,
+            fixture:           test.fixture.name,
+            test:              test.name,
+            parsedUserAgent:   connection.browserInfo.parsedUserAgent,
+        });
+
+        return new Capturer(this.screenshotsPath, testEntry, connection, pathPattern, this.fullPage, warningLog);
+    }
+
+    addTestRun (test, testRun) {
+        const testEntry = this._getTestEntry(test);
+
+        testEntry.testRuns[testRun.browserConnection.id] = testRun;
     }
 }

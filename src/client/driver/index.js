@@ -2,29 +2,19 @@ import hammerhead from './deps/hammerhead';
 import Driver from './driver';
 import IframeDriver from './iframe-driver';
 import ScriptExecutionBarrier from './script-execution-barrier';
+import embeddingUtils from './embedding-utils';
+import INTERNAL_PROPERTIES from './internal-properties';
 
+const nativeMethods    = hammerhead.nativeMethods;
+const evalIframeScript = hammerhead.EVENTS.evalIframeScript;
 
-hammerhead.nativeMethods.objectDefineProperty.call(window, window, '%testCafeDriver%', {
-    enumerable:   false,
-    configurable: false,
-    writable:     false,
-    value:        Driver
-});
-
-hammerhead.nativeMethods.objectDefineProperty.call(window, window, '%testCafeIframeDriver%', {
-    enumerable:   false,
-    configurable: false,
-    writable:     false,
-    value:        IframeDriver
-});
-
-hammerhead.nativeMethods.objectDefineProperty.call(window, window, '%ScriptExecutionBarrier%', {
-    enumerable:   false,
-    configurable: false,
-    writable:     false,
+nativeMethods.objectDefineProperty(window, INTERNAL_PROPERTIES.testCafeDriver, { configurable: true, value: Driver });
+nativeMethods.objectDefineProperty(window, INTERNAL_PROPERTIES.testCafeIframeDriver, { configurable: true, value: IframeDriver });
+nativeMethods.objectDefineProperty(window, INTERNAL_PROPERTIES.scriptExecutionBarrier, {
+    configurable: true,
     value:        ScriptExecutionBarrier
 });
+nativeMethods.objectDefineProperty(window, INTERNAL_PROPERTIES.testCafeEmbeddingUtils, { configurable: true, value: embeddingUtils });
 
-/* eslint-disable no-undef */
-hammerhead.on(hammerhead.EVENTS.evalIframeScript, e => initTestCafeClientDrivers(e.iframe.contentWindow, true));
-/* eslint-enable no-undef */
+// eslint-disable-next-line no-undef
+hammerhead.on(evalIframeScript, e => initTestCafeClientDrivers(nativeMethods.contentWindowGetter.call(e.iframe), true));

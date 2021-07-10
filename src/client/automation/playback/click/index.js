@@ -1,26 +1,23 @@
 import hammerhead from '../../deps/hammerhead';
 import testCafeCore from '../../deps/testcafe-core';
-import testCafeUI from '../../deps/testcafe-ui';
 import VisibleElementAutomation from '../visible-element-automation';
-import { focusAndSetSelection, focusByRelatedElement } from '../../utils/utils';
+import { focusAndSetSelection } from '../../utils/utils';
 import cursor from '../../cursor';
 import nextTick from '../../utils/next-tick';
+import createClickCommand from './click-command';
 
-var Promise = hammerhead.Promise;
+const Promise = hammerhead.Promise;
 
-var extend           = hammerhead.utils.extend;
-var browserUtils     = hammerhead.utils.browser;
-var featureDetection = hammerhead.utils.featureDetection;
-var eventSimulator   = hammerhead.eventSandbox.eventSimulator;
+const extend           = hammerhead.utils.extend;
+const browserUtils     = hammerhead.utils.browser;
+const featureDetection = hammerhead.utils.featureDetection;
+const eventSimulator   = hammerhead.eventSandbox.eventSimulator;
+const listeners        = hammerhead.eventSandbox.listeners;
 
-var domUtils   = testCafeCore.domUtils;
-var styleUtils = testCafeCore.styleUtils;
-var eventUtils = testCafeCore.eventUtils;
-var arrayUtils = testCafeCore.arrayUtils;
-var delay      = testCafeCore.delay;
-
-var selectElementUI = testCafeUI.selectElement;
-
+const domUtils   = testCafeCore.domUtils;
+const eventUtils = testCafeCore.eventUtils;
+const arrayUtils = testCafeCore.arrayUtils;
+const delay      = testCafeCore.delay;
 
 export default class ClickAutomation extends VisibleElementAutomation {
     constructor (element, clickOptions) {
@@ -37,12 +34,14 @@ export default class ClickAutomation extends VisibleElementAutomation {
             mousedownPrevented:      false,
             blurRaised:              false,
             simulateDefaultBehavior: true,
-            clickElement:            null
+            clickElement:            null,
+            touchStartCancelled:     false,
+            touchEndCancelled:       false
         };
     }
 
     _bindMousedownHandler () {
-        var onmousedown = e => {
+        const onmousedown = e => {
             this.eventState.mousedownPrevented = e.defaultPrevented;
             eventUtils.preventDefault(e);
             eventUtils.unbind(this.element, 'mousedown', onmousedown);
@@ -52,7 +51,7 @@ export default class ClickAutomation extends VisibleElementAutomation {
     }
 
     _bindBlurHandler (element) {
-        var onblur = () => {
+        const onblur = () => {
             this.eventState.blurRaised = true;
             eventUtils.unbind(element, 'blur', onblur, true);
         };
@@ -60,10 +59,17 @@ export default class ClickAutomation extends VisibleElementAutomation {
         eventUtils.bind(element, 'blur', onblur, true);
     }
 
+    // NOTE:
+    // If `touchstart`, `touchmove`, or `touchend` are canceled, we should not dispatch any mouse event
+    // that would be a consequential result of the prevented touch event
+    _isTouchEventWasCancelled () {
+        return this.eventState.touchStartCancelled || this.eventState.touchEndCancelled;
+    }
+
     _raiseTouchEvents (eventArgs) {
         if (featureDetection.isTouchDevice) {
-            eventSimulator.touchstart(eventArgs.element, eventArgs.options);
-            eventSimulator.touchend(eventArgs.element, eventArgs.options);
+            this.eventState.touchStartCancelled = !eventSimulator.touchstart(eventArgs.element, eventArgs.options);
+            this.eventState.touchEndCancelled   = !eventSimulator.touchend(eventArgs.element, eventArgs.options);
         }
     }
 
@@ -75,21 +81,22 @@ export default class ClickAutomation extends VisibleElementAutomation {
             .then(() => {
                 this._raiseTouchEvents(eventArgs);
 
-                var activeElement = domUtils.getActiveElement();
+                const activeElement = domUtils.getActiveElement();
 
                 this.activeElementBeforeMouseDown = activeElement;
 
                 // NOTE: In WebKit and IE, the mousedown event opens the select element's dropdown;
                 // therefore, we should prevent mousedown and hide the dropdown (B236416).
-                var needCloseSelectDropDown = (browserUtils.isWebKit || browserUtils.isIE) &&
-                                              domUtils.isSelectElement(this.element);
+                const needCloseSelectDropDown = (browserUtils.isWebKit || browserUtils.isIE) &&
+                                              domUtils.isSelectElement(this.mouseDownElement);
 
                 if (needCloseSelectDropDown)
                     this._bindMousedownHandler();
 
                 this._bindBlurHandler(activeElement);
 
-                this.eventState.simulateDefaultBehavior = eventSimulator.mousedown(eventArgs.element, eventArgs.options);
+                if (!this._isTouchEventWasCancelled())
+                    this.eventState.simulateDefaultBehavior = eventSimulator.mousedown(eventArgs.element, eventArgs.options);
 
                 if (this.eventState.simulateDefaultBehavior === false)
                     this.eventState.simulateDefaultBehavior = needCloseSelectDropDown && !this.eventState.mousedownPrevented;
@@ -104,7 +111,7 @@ export default class ClickAutomation extends VisibleElementAutomation {
         // We simulate the blur event if the active element was changed after the mousedown, and
         // the blur event does not get raised automatically (B239273, B253520)
         return new Promise(resolve => {
-            var simulateBlur = domUtils.getActiveElement() !== element && !this.eventState.blurRaised;
+            const simulateBlur = domUtils.getActiveElement() !== element && !this.eventState.blurRaised;
 
             if (!simulateBlur) {
                 resolve();
@@ -136,17 +143,17 @@ export default class ClickAutomation extends VisibleElementAutomation {
         // NOTE: If a target element is a contentEditable element, we need to call focusAndSetSelection directly for
         // this element. Otherwise, if the element obtained by elementFromPoint is a child of the contentEditable
         // element, a selection position may be calculated incorrectly (by using the caretPos option).
-        var elementForFocus = domUtils.isContentEditableElement(this.element) ? this.element : eventArgs.element;
+        const elementForFocus = domUtils.isContentEditableElement(this.element) ? this.element : eventArgs.element;
 
         // NOTE: IE doesn't perform focus if active element has been changed while executing mousedown
-        var simulateFocus = !browserUtils.isIE || this.activeElementBeforeMouseDown === domUtils.getActiveElement();
+        const simulateFocus = !browserUtils.isIE || this.activeElementBeforeMouseDown === domUtils.getActiveElement();
 
         return focusAndSetSelection(elementForFocus, simulateFocus, this.caretPos);
     }
 
     static _getElementForClick (mouseDownElement, topElement, mouseDownElementParentNodes) {
-        var topElementParentNodes = domUtils.getParents(topElement);
-        var areElementsSame       = domUtils.isTheSameNode(topElement, mouseDownElement);
+        const topElementParentNodes = domUtils.getParents(topElement);
+        const areElementsSame       = domUtils.isTheSameNode(topElement, mouseDownElement);
 
         // NOTE: Mozilla Firefox always skips click, if an element under cursor has been changed after mousedown.
         if (browserUtils.isFirefox)
@@ -180,48 +187,49 @@ export default class ClickAutomation extends VisibleElementAutomation {
                 this.eventState.clickElement = ClickAutomation._getElementForClick(this.mouseDownElement, element,
                     this.targetElementParentNodes);
 
-                eventSimulator.mouseup(element, eventArgs.options);
+
+                let timeStamp = {};
+
+                const getTimeStamp = e => {
+                    timeStamp = e.timeStamp;
+
+                    listeners.removeInternalEventBeforeListener(window, ['mouseup'], getTimeStamp);
+                };
+
+                if (!browserUtils.isIE)
+                    listeners.addInternalEventBeforeListener(window, ['mouseup'], getTimeStamp);
+
+                if (!this._isTouchEventWasCancelled())
+                    eventSimulator.mouseup(element, eventArgs.options);
+
+                return { timeStamp };
             });
     }
 
     _click (eventArgs) {
-        if (domUtils.isOptionElement(eventArgs.element))
-            return eventArgs.element;
+        const clickCommand = createClickCommand(this.eventState, eventArgs);
 
-        if (this.eventState.clickElement)
-            eventSimulator.click(this.eventState.clickElement, eventArgs.options);
-
-        if (!domUtils.isElementFocusable(eventArgs.element))
-            focusByRelatedElement(eventArgs.element);
-
-        // NOTE: Emulating the click event on the 'select' element doesn't expand the
-        // dropdown with options (except chrome), therefore we should emulate it.
-        var isSelectElement      = domUtils.isSelectElement(eventArgs.element);
-        var isSelectWithDropDown = isSelectElement && styleUtils.getSelectElementSize(eventArgs.element) === 1;
-
-        if (isSelectWithDropDown && this.eventState.simulateDefaultBehavior !== false) {
-            if (selectElementUI.isOptionListExpanded(eventArgs.element))
-                selectElementUI.collapseOptionList();
-            else
-                selectElementUI.expandOptionList(eventArgs.element);
-        }
+        if (!this._isTouchEventWasCancelled())
+            clickCommand.run();
 
         return eventArgs;
     }
 
     run (useStrictElementCheck) {
-        var eventArgs = null;
+        let eventArgs = null;
 
         return this
             ._ensureElement(useStrictElementCheck)
-            .then(({ element, clientPoint, screenPoint }) => {
+            .then(({ element, clientPoint, screenPoint, devicePoint }) => {
                 eventArgs = {
                     point:       clientPoint,
                     screenPoint: screenPoint,
                     element:     element,
                     options:     extend({
                         clientX: clientPoint.x,
-                        clientY: clientPoint.y
+                        clientY: clientPoint.y,
+                        screenX: devicePoint.x,
+                        screenY: devicePoint.y
                     }, this.modifiers)
                 };
 
@@ -230,6 +238,10 @@ export default class ClickAutomation extends VisibleElementAutomation {
                 return Promise.all([delay(this.automationSettings.mouseActionStepDelay), this._mousedown(eventArgs)]);
             })
             .then(() => this._mouseup(eventArgs))
-            .then(() => this._click(eventArgs));
+            .then(({ timeStamp }) => {
+                eventArgs.options.timeStamp = timeStamp;
+
+                return this._click(eventArgs);
+            });
     }
 }

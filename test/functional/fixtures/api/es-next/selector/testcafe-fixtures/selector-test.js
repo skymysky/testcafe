@@ -7,9 +7,9 @@ fixture `Selector`
 const getElementById = Selector(id => document.getElementById(id));
 
 const isIEFunction = ClientFunction(() => {
-    var userAgent = window.navigator.userAgent;
-    var appName   = window.navigator.appName;
-    var isIE11Re  = new RegExp('Trident/.*rv:([0-9]{1,}[\.0-9]{0,})');
+    const userAgent = window.navigator.userAgent;
+    const appName   = window.navigator.appName;
+    const isIE11Re  = new RegExp('Trident/.*rv:([0-9]{1,}[.0-9]{0,})');
 
     return appName === 'Microsoft Internet Explorer' ||
            appName === 'Netscape' && isIE11Re.exec(userAgent) !== null;
@@ -174,8 +174,8 @@ test('`innerText` element snapshot property', async t => {
 
     // NOTE: we have to use regexp because the innerText field
     // returns a little bit different values in IE9 and other browsers
-    var expectedTextRe = isIE ? /^Hey\nyo test {2}42 test {2}'hey hey'; \.someClass \{ \}/ :
-                         /^Hey\nyo test {1,2}test( \u0000)?/;
+    const expectedTextRe = isIE ? /^Hey\nyo test {2}42 test {2}'hey hey'; \.someClass \{ \}/ :
+        /^Hey\nyo test {1,2}test/;
 
     await t.expect(expectedTextRe.test(innerText.trim())).ok();
 });
@@ -325,7 +325,7 @@ test('Element on new page', async t => {
 });
 
 test('Derivative selector without options', async () => {
-    var derivative = Selector(getElementById('textInput'));
+    const derivative = Selector(getElementById('textInput'));
 
     await derivative();
 });
@@ -449,7 +449,7 @@ test('Selector "withText" method', async t => {
         .expect(getElementById('el1').withText('element 4.').exists).notOk()
         .expect(getElementById('el4').withText('element 4.').id).eql('el4');
 
-    var getDocument = Selector(() => document);
+    const getDocument = Selector(() => document);
 
     // Should filter document if text filter specified
     await t
@@ -459,7 +459,7 @@ test('Selector "withText" method', async t => {
         //Compound
         .expect(Selector('div').withText('This').withText('element 4').id).eql('el4');
 
-    var getNode = Selector(() => document.getElementById('el2').childNodes[0]);
+    const getNode = Selector(() => document.getElementById('el2').childNodes[0]);
 
     await t
         .expect(getNode().withText('Lorem ipsum dolor sit amet, consectetur').exists).notOk()
@@ -471,6 +471,21 @@ test('Selector "withText" method', async t => {
     await t
         .expect(elWithClass('idxEl').withText('element 4.').id).eql('el4')
         .expect(elWithClass('idxEl').withText('element 1.').id).eql('el1');
+});
+
+test('Selector "withExactText" method', async t => {
+    let selector = Selector('#withExactText div');
+
+    await t
+        .expect(selector.withText('Element with text').count).eql(6);
+
+    selector = selector.withExactText('Element with text');
+
+    await t
+        .expect(selector.count).eql(3)
+        .expect(selector.nth(0).id).eql('passed-0')
+        .expect(selector.nth(1).id).eql('passed-1')
+        .expect(selector.nth(2).id).eql('passed-2');
 });
 
 test('Selector "withAttribute" method', async t => {
@@ -495,7 +510,7 @@ test('Selector "withAttribute" method', async t => {
         .expect(Selector('div').withAttribute('store').exists).notOk()
         .expect(Selector('div').withAttribute('data-store', 'data-attr').exists).notOk();
 
-    var byAtrSelector = Selector(() => document.querySelectorAll('.attr'));
+    const byAtrSelector = Selector(() => document.querySelectorAll('.attr'));
 
     await t
     // Function selector and attr filter
@@ -508,18 +523,18 @@ test('Selector "withAttribute" method', async t => {
         .expect(Selector('div').withAttribute('class', /attr/).withAttribute('data-store', 'data-attr2').id).eql('attr2');
 
     // Parameterized selector and attr filter
-    var byClassNameSelector = Selector(className => document.getElementsByClassName(className));
+    const byClassNameSelector = Selector(className => document.getElementsByClassName(className));
 
     await t
         .expect(byClassNameSelector('attr').withAttribute('data-store', 'data-attr1').id).eql('attr1')
         .expect(byClassNameSelector('attr').withAttribute('data-store', 'data-attr2').id).eql('attr2');
 
-    var documentSelector = Selector(() => document);
+    const documentSelector = Selector(() => document);
 
     // Should not filter document with attributes
     await t.expect(documentSelector.withAttribute('data-store', 'data-attr1').exists).notOk();
 
-    var nodeSelector = Selector(() => document.getElementById('attr1').childNodes[0]);
+    const nodeSelector = Selector(() => document.getElementById('attr1').childNodes[0]);
 
     // Should not work for nodes
     await t.expect(nodeSelector.withAttribute('data-store').exists).notOk();
@@ -581,6 +596,33 @@ test('Combination of filter methods', async t => {
     id = await t.eval(() => firstSelector().id, { dependencies: { firstSelector: firstSelector.nth(0) } });
 
     await t.expect(id).eql('el2');
+});
+
+test('Selector `filterVisible/filterHidden` methods with plain structure', async t => {
+    const elements = Selector('#filterVisiblePlain div');
+
+    await t.expect(elements.count).eql(4);
+    await t.expect(elements.filterVisible().count).eql(1);
+    await t.expect(elements.filterHidden().count).eql(3);
+    await t.expect(elements.filterVisible().filterHidden().count).eql(0);
+});
+
+test('Selector `filterVisible/filterHidden` methods with hierarchical structure', async t => {
+    let elements = Selector('#filterVisibleHierarchical > div');
+
+    await t.expect(elements.child('p').count).eql(11);
+
+    elements = elements.filterVisible().child('p');
+
+    await t.expect(elements.count).eql(6);
+    await t.expect(elements.filterVisible().count).eql(5);
+    await t.expect(elements.filterVisible().filter('.p').count).eql(2);
+    await t.expect(elements.filterHidden().count).eql(1);
+
+    elements = Selector('#filterVisibleHierarchical > div').filterHidden().child('p');
+
+    await t.expect(elements.count).eql(5);
+    await t.expect(elements.filterHidden().count).eql(5);
 });
 
 test('Selector "find" method', async t => {
@@ -991,4 +1033,84 @@ test('hasAttribute method', async t => {
     await t
         .expect(sel.hasAttribute('id')).notOk()
         .expect(el.hasAttribute).eql(void 0);
+});
+
+test('Selector `addCustomMethods` method - Selector mode', async t => {
+    const sectionDiv = Selector('section div').addCustomMethods({
+        customFilter:        nodes => nodes.filter(node => node.id === 'el2' || node.id === 'el3'),
+        customFilterByParam: (nodes, id) => nodes.filter(node => node.id === id)
+    }, { returnDOMNodes: true });
+
+    const form = Selector('form').addCustomMethods({
+        customFind:       (nodes) => nodes[0].querySelectorAll('input'),
+        customFindByType: (nodes, type) => nodes[0].querySelectorAll(`input[type=${type}]`)
+    }, { returnDOMNodes: true });
+
+    let filteredDivs = sectionDiv.customFilter();
+    let divsById     = sectionDiv.customFilterByParam('el4');
+
+    await t
+        .expect(filteredDivs.count).eql(2)
+        .expect(filteredDivs.nth(0).id).eql('el2')
+        .expect(filteredDivs.nth(1).id).eql('el3')
+
+        .expect(divsById.id).eql('el4');
+
+    const inputs      = form.customFind();
+    const inputByType = form.customFindByType('checkbox');
+
+    await t
+        .expect(inputs.count).eql(2)
+        .expect(inputs.nth(0).id).eql('textInput')
+        .expect(inputs.nth(1).id).eql('checkInput')
+
+        .expect(inputByType.id).eql('checkInput');
+
+    const snapshot = await sectionDiv();
+
+    filteredDivs = snapshot.customFilter();
+    divsById     = snapshot.customFilterByParam('el4');
+
+    await t
+        .expect(filteredDivs.count).eql(2)
+        .expect(filteredDivs.nth(0).id).eql('el2')
+        .expect(filteredDivs.nth(1).id).eql('el3')
+
+        .expect(divsById.id).eql('el4');
+
+    const nonExistingElement = Selector('nonExistingElement').addCustomMethods({
+        prop: () => 'value'
+    }, { returnDOMNodes: true });
+
+    await t.expect(await nonExistingElement()).eql(null);
+});
+
+fixture `Selector "shadowRoot" method`
+    .page `http://localhost:3000/fixtures/api/es-next/selector/pages/shadow.html`;
+
+test('Selector "shadowRoot" method - children are found', async t => {
+    const shadowRoot = Selector('div').shadowRoot();
+
+    await t.expect(shadowRoot.child('p').withText('Text should be found!').exists).ok();
+    await t.expect(shadowRoot.find('div').shadowRoot().child('p').withText('Nested text should be found!').exists).ok();
+
+    await t.click(shadowRoot.child('p').withText('Text should be found!'));
+});
+
+test('Selector "shadowRoot" method - shadow root not found', async t => {
+    const shadowRoot = Selector('p').shadowRoot();
+
+    await t.click(shadowRoot.find('div'));
+});
+
+test('Selector "shadowRoot" method - content property', async t => {
+    const shadowRoot = Selector('div').shadowRoot();
+
+    await t.expect(shadowRoot.textContent).contains('Text should be found!');
+});
+
+test('Cannot use "shadowRoot" as a target', async t => {
+    const shadowRoot = Selector('div').shadowRoot();
+
+    await t.click(shadowRoot);
 });

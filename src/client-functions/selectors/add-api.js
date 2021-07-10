@@ -1,43 +1,46 @@
-import { assign } from 'lodash';
+import { inspect } from 'util';
+import { assign, pull as remove } from 'lodash';
 import clientFunctionBuilderSymbol from '../builder-symbol';
-import { ELEMENT_SNAPSHOT_PROPERTIES, NODE_SNAPSHOT_PROPERTIES } from './snapshot-properties';
-import { CantObtainInfoForElementSpecifiedBySelectorError } from '../../errors/test-run';
+import { SNAPSHOT_PROPERTIES } from './snapshot-properties';
 import { getCallsiteForMethod } from '../../errors/get-callsite';
 import ClientFunctionBuilder from '../client-function-builder';
-import ClientFunctionResultPromise from '../result-promise';
+import ReExecutablePromise from '../../utils/re-executable-promise';
 import { assertType, is } from '../../errors/runtime/type-assertions';
 import makeRegExp from '../../utils/make-reg-exp';
 import selectorTextFilter from './selector-text-filter';
 import selectorAttributeFilter from './selector-attribute-filter';
+import prepareApiFnArgs from './prepare-api-args';
+import { getCallsiteId } from '../../utils/callsite';
+import selectorApiExecutionMode from '../selector-api-execution-mode';
 
-const SNAPSHOT_PROPERTIES = NODE_SNAPSHOT_PROPERTIES.concat(ELEMENT_SNAPSHOT_PROPERTIES);
+const VISIBLE_PROP_NAME       = 'visible';
+const SNAPSHOT_PROP_PRIMITIVE = `[object ${ReExecutablePromise.name}]`;
 
-
-var filterNodes = (new ClientFunctionBuilder((nodes, filter, querySelectorRoot, originNode, ...filterArgs) => {
+const filterNodes = (new ClientFunctionBuilder((nodes, filter, querySelectorRoot, originNode, ...filterArgs) => {
     if (typeof filter === 'number') {
-        var matchingNode = filter < 0 ? nodes[nodes.length + filter] : nodes[filter];
+        const matchingNode = filter < 0 ? nodes[nodes.length + filter] : nodes[filter];
 
         return matchingNode ? [matchingNode] : [];
     }
 
-    var result = [];
+    const result = [];
 
     if (typeof filter === 'string') {
-        // NOTE: we can search for elements only in document or element.
-        if (querySelectorRoot.nodeType !== 1 && querySelectorRoot.nodeType !== 9)
+        // NOTE: we can search for elements only in document/element/shadow root.
+        if (querySelectorRoot.nodeType !== 1 && querySelectorRoot.nodeType !== 9 && querySelectorRoot.nodeType !== 11)
             return null;
 
-        var matching    = querySelectorRoot.querySelectorAll(filter);
-        var matchingArr = [];
+        const matching    = querySelectorRoot.querySelectorAll(filter);
+        const matchingArr = [];
 
-        for (var i = 0; i < matching.length; i++)
+        for (let i = 0; i < matching.length; i++)
             matchingArr.push(matching[i]);
 
         filter = node => matchingArr.indexOf(node) > -1;
     }
 
     if (typeof filter === 'function') {
-        for (var j = 0; j < nodes.length; j++) {
+        for (let j = 0; j < nodes.length; j++) {
             if (filter(nodes[j], j, originNode, ...filterArgs))
                 result.push(nodes[j]);
         }
@@ -46,19 +49,19 @@ var filterNodes = (new ClientFunctionBuilder((nodes, filter, querySelectorRoot, 
     return result;
 })).getFunction();
 
-var expandSelectorResults = (new ClientFunctionBuilder((selector, populateDerivativeNodes) => {
-    var nodes = selector();
+const expandSelectorResults = (new ClientFunctionBuilder((selector, populateDerivativeNodes) => {
+    const nodes = selector();
 
     if (!nodes.length)
         return null;
 
-    var result = [];
+    const result = [];
 
-    for (var i = 0; i < nodes.length; i++) {
-        var derivativeNodes = populateDerivativeNodes(nodes[i]);
+    for (let i = 0; i < nodes.length; i++) {
+        const derivativeNodes = populateDerivativeNodes(nodes[i]);
 
         if (derivativeNodes) {
-            for (var j = 0; j < derivativeNodes.length; j++) {
+            for (let j = 0; j < derivativeNodes.length; j++) {
                 if (result.indexOf(derivativeNodes[j]) < 0)
                     result.push(derivativeNodes[j]);
             }
@@ -69,9 +72,9 @@ var expandSelectorResults = (new ClientFunctionBuilder((selector, populateDeriva
 
 })).getFunction();
 
-async function getSnapshot (getSelector, callsite) {
-    var node     = null;
-    var selector = getSelector();
+async function getSnapshot (getSelector, callsite, SelectorBuilder, getVisibleValueMode) {
+    let node       = null;
+    const selector = new SelectorBuilder(getSelector(), { getVisibleValueMode, needError: true }, { instantiation: 'Selector' }, callsite).getFunction();
 
     try {
         node = await selector();
@@ -79,132 +82,283 @@ async function getSnapshot (getSelector, callsite) {
 
     catch (err) {
         err.callsite = callsite;
+
         throw err;
     }
 
-    if (!node)
-        throw new CantObtainInfoForElementSpecifiedBySelectorError(callsite);
+    return node;
+}
+
+function getSnapshotSync (getSelector, callsite, SelectorBuilder, getVisibleValueMode) {
+    let node       = null;
+    const selector = new SelectorBuilder(getSelector(), { getVisibleValueMode, needError: true }, { instantiation: 'Selector' }, callsite).getFunction();
+
+    try {
+        node = selector();
+    }
+
+    catch (err) {
+        err.callsite = callsite;
+
+        throw err;
+    }
 
     return node;
 }
 
 function assertAddCustomDOMPropertiesOptions (properties) {
-    assertType(is.nonNullObject, 'addCustomDOMProperties', '"addCustomDOMProperties" option', properties);
+    assertType(is.nonNullObject, 'addCustomDOMProperties', 'The "addCustomDOMProperties" option', properties);
 
     Object.keys(properties).forEach(prop => {
-        assertType(is.function, 'addCustomDOMProperties', `Custom DOM properties method '${prop}'`, properties[prop]);
+        assertType(is.function, 'addCustomDOMProperties', `The custom DOM properties method '${prop}'`, properties[prop]);
     });
 }
 
-function assertAddCustomMethods (properties) {
-    assertType(is.nonNullObject, 'addCustomMethods', '"addCustomMethods" option', properties);
+function assertAddCustomMethods (properties, opts) {
+    assertType(is.nonNullObject, 'addCustomMethods', 'The "addCustomMethods" option', properties);
+
+    if (opts !== void 0)
+        assertType(is.nonNullObject, 'addCustomMethods', 'The "addCustomMethods" option', opts);
 
     Object.keys(properties).forEach(prop => {
-        assertType(is.function, 'addCustomMethods', `Custom method '${prop}'`, properties[prop]);
+        assertType(is.function, 'addCustomMethods', `The custom method '${prop}'`, properties[prop]);
     });
 }
 
-function addSnapshotProperties (obj, getSelector, properties) {
+function getDerivativeSelectorArgs (options, selectorFn, apiFn, filter, additionalDependencies) {
+    return Object.assign({}, options, { selectorFn, apiFn, filter, additionalDependencies });
+}
+
+function createPrimitiveGetterWrapper (observedCallsites, callsite) {
+    return (depth, options) => {
+        const isTestCafeInspect = options?.isTestCafeInspect;
+
+        if (observedCallsites && !isTestCafeInspect)
+            observedCallsites.unawaitedSnapshotCallsites.add(callsite);
+
+        return SNAPSHOT_PROP_PRIMITIVE;
+    };
+}
+
+function checkForExcessiveAwaits (snapshotPropertyCallsites, checkedCallsite) {
+    const callsiteId = getCallsiteId(checkedCallsite);
+
+    // NOTE: If there is an asserted callsite, it means that .expect() was already called.
+    // We don't raise a warning and delete the callsite.
+    if (snapshotPropertyCallsites[callsiteId] && snapshotPropertyCallsites[callsiteId].checked)
+        delete snapshotPropertyCallsites[callsiteId];
+    // NOTE: If the calliste already exists, but is not asserted, it means that there are
+    // multiple awaited callsites in one assertion. We raise a warning for each of them.
+    else if (snapshotPropertyCallsites[callsiteId] && !snapshotPropertyCallsites[callsiteId].checked)
+        snapshotPropertyCallsites[callsiteId].callsites.push(checkedCallsite);
+    else
+        snapshotPropertyCallsites[callsiteId] = { callsites: [ checkedCallsite ], checked: false };
+}
+
+function addSnapshotProperties (obj, getSelector, SelectorBuilder, properties, observedCallsites) {
     properties.forEach(prop => {
         Object.defineProperty(obj, prop, {
             get: () => {
-                var callsite = getCallsiteForMethod('get');
+                const callsite = getCallsiteForMethod('get');
 
-                return ClientFunctionResultPromise.fromFn(async () => {
-                    var snapshot = await getSnapshot(getSelector, callsite);
+                if (selectorApiExecutionMode.isSync)
+                    return getSnapshotSync(getSelector, callsite, SelectorBuilder)[prop];
+
+                const propertyPromise = ReExecutablePromise.fromFn(async () => {
+                    const snapshot = await getSnapshot(getSelector, callsite, SelectorBuilder);
 
                     return snapshot[prop];
                 });
+
+                const primitiveGetterWrapper = createPrimitiveGetterWrapper(observedCallsites, callsite);
+
+                propertyPromise[Symbol.toPrimitive] = primitiveGetterWrapper;
+                propertyPromise[inspect.custom]     = primitiveGetterWrapper;
+
+                propertyPromise.then = function (onFulfilled, onRejected) {
+                    if (observedCallsites)
+                        checkForExcessiveAwaits(observedCallsites.snapshotPropertyCallsites, callsite);
+
+                    this._ensureExecuting();
+
+                    return this._taskPromise.then(onFulfilled, onRejected);
+                };
+
+                return propertyPromise;
             }
         });
     });
 }
 
-export function addCustomMethods (obj, getSelector, customMethods) {
-    var customMethodProps = customMethods ? Object.keys(customMethods) : [];
+function addVisibleProperty ({ obj, getSelector, SelectorBuilder }) {
+    Object.defineProperty(obj, VISIBLE_PROP_NAME, {
+        get: () => {
+            const callsite = getCallsiteForMethod('get');
 
-    customMethodProps.forEach(prop => {
-        var dependencies = {
-            customMethod: customMethods[prop],
-            selector:     getSelector()
-        };
+            if (selectorApiExecutionMode.isSync) {
+                const snapshot = getSnapshotSync(getSelector, callsite, SelectorBuilder, true);
 
-        var callsiteNames = { instantiation: prop };
+                return !!snapshot && snapshot[VISIBLE_PROP_NAME];
+            }
 
-        obj[prop] = (new ClientFunctionBuilder((...args) => {
-            /* eslint-disable no-undef */
-            var node = selector();
+            return ReExecutablePromise.fromFn(async () => {
+                const snapshot = await getSnapshot(getSelector, callsite, SelectorBuilder, true);
 
-            return customMethod.apply(customMethod, [node].concat(args));
-            /* eslint-enable no-undef */
-        }, { dependencies }, callsiteNames)).getFunction();
+                return !!snapshot && snapshot[VISIBLE_PROP_NAME];
+            });
+        }
     });
 }
 
-function addSnapshotPropertyShorthands (obj, getSelector, customDOMProperties, customMethods) {
-    var properties = SNAPSHOT_PROPERTIES;
+export function addCustomMethods (obj, getSelector, SelectorBuilder, customMethods) {
+    const customMethodProps = customMethods ? Object.keys(customMethods) : [];
+
+    customMethodProps.forEach(prop => {
+        const { returnDOMNodes = false, method } = customMethods[prop];
+
+        const dependencies = {
+            customMethod: method,
+            selector:     getSelector()
+        };
+
+        const callsiteNames = { instantiation: prop };
+
+        if (returnDOMNodes) {
+            obj[prop] = (...args) => {
+                const selectorFn = () => {
+                    /* eslint-disable no-undef */
+                    const nodes = selector();
+
+                    return customMethod.apply(customMethod, [nodes].concat(args));
+                    /* eslint-enable no-undef */
+                };
+
+                const apiFn = prepareApiFnArgs(prop, ...args);
+                const filter = () => true;
+
+                const additionalDependencies = {
+                    args,
+                    customMethod: method
+                };
+
+                return createDerivativeSelectorWithFilter({ getSelector, SelectorBuilder, selectorFn, apiFn, filter, additionalDependencies });
+            };
+        }
+        else {
+            obj[prop] = (new ClientFunctionBuilder((...args) => {
+                /* eslint-disable no-undef */
+                const node = selector();
+
+                return customMethod.apply(customMethod, [node].concat(args));
+                /* eslint-enable no-undef */
+            }, { dependencies }, callsiteNames)).getFunction();
+        }
+    });
+}
+
+function prepareSnapshotPropertyList (customDOMProperties) {
+    let properties = [...SNAPSHOT_PROPERTIES];
+
+    // NOTE: The 'visible' snapshot property has a separate handler.
+    remove(properties, VISIBLE_PROP_NAME);
 
     if (customDOMProperties)
         properties = properties.concat(Object.keys(customDOMProperties));
 
-    addSnapshotProperties(obj, getSelector, properties);
-    addCustomMethods(obj, getSelector, customMethods);
+    return properties;
+}
+
+function addSnapshotPropertyShorthands ({ obj, getSelector, SelectorBuilder, customDOMProperties, customMethods, observedCallsites }) {
+    const properties = prepareSnapshotPropertyList(customDOMProperties);
+
+    addSnapshotProperties(obj, getSelector, SelectorBuilder, properties, observedCallsites);
+    addCustomMethods(obj, getSelector, SelectorBuilder, customMethods);
 
     obj.getStyleProperty = prop => {
-        var callsite = getCallsiteForMethod('getStyleProperty');
+        const callsite = getCallsiteForMethod('getStyleProperty');
 
-        return ClientFunctionResultPromise.fromFn(async () => {
-            var snapshot = await getSnapshot(getSelector, callsite);
+        if (selectorApiExecutionMode.isSync) {
+            const snapshot = getSnapshotSync(getSelector, callsite, SelectorBuilder);
+
+            return snapshot.style ? snapshot.style[prop] : void 0;
+        }
+
+        return ReExecutablePromise.fromFn(async () => {
+            const snapshot = await getSnapshot(getSelector, callsite, SelectorBuilder);
 
             return snapshot.style ? snapshot.style[prop] : void 0;
         });
     };
 
     obj.getAttribute = attrName => {
-        var callsite = getCallsiteForMethod('getAttribute');
+        const callsite = getCallsiteForMethod('getAttribute');
 
-        return ClientFunctionResultPromise.fromFn(async () => {
-            var snapshot = await getSnapshot(getSelector, callsite);
+        if (selectorApiExecutionMode.isSync) {
+            const snapshot = getSnapshotSync(getSelector, callsite, SelectorBuilder);
+
+            return snapshot.attributes ? snapshot.attributes[attrName] : void 0;
+        }
+
+        return ReExecutablePromise.fromFn(async () => {
+            const snapshot = await getSnapshot(getSelector, callsite, SelectorBuilder);
 
             return snapshot.attributes ? snapshot.attributes[attrName] : void 0;
         });
     };
 
     obj.hasAttribute = attrName => {
-        var callsite = getCallsiteForMethod('hasAttribute');
+        const callsite = getCallsiteForMethod('hasAttribute');
 
-        return ClientFunctionResultPromise.fromFn(async () => {
-            var snapshot = await getSnapshot(getSelector, callsite);
+        if (selectorApiExecutionMode.isSync) {
+            const snapshot = getSnapshotSync(getSelector, callsite, SelectorBuilder);
+
+            return snapshot.attributes ? snapshot.attributes.hasOwnProperty(attrName) : false;
+        }
+
+        return ReExecutablePromise.fromFn(async () => {
+            const snapshot = await getSnapshot(getSelector, callsite, SelectorBuilder);
 
             return snapshot.attributes ? snapshot.attributes.hasOwnProperty(attrName) : false;
         });
     };
 
     obj.getBoundingClientRectProperty = prop => {
-        var callsite = getCallsiteForMethod('getBoundingClientRectProperty');
+        const callsite = getCallsiteForMethod('getBoundingClientRectProperty');
 
-        return ClientFunctionResultPromise.fromFn(async () => {
-            var snapshot = await getSnapshot(getSelector, callsite);
+        if (selectorApiExecutionMode.isSync) {
+            const snapshot = getSnapshotSync(getSelector, callsite, SelectorBuilder);
+
+            return snapshot.boundingClientRect ? snapshot.boundingClientRect[prop] : void 0;
+        }
+
+        return ReExecutablePromise.fromFn(async () => {
+            const snapshot = await getSnapshot(getSelector, callsite, SelectorBuilder);
 
             return snapshot.boundingClientRect ? snapshot.boundingClientRect[prop] : void 0;
         });
     };
 
     obj.hasClass = name => {
-        var callsite = getCallsiteForMethod('hasClass');
+        const callsite = getCallsiteForMethod('hasClass');
 
-        return ClientFunctionResultPromise.fromFn(async () => {
-            var snapshot = await getSnapshot(getSelector, callsite);
+        if (selectorApiExecutionMode.isSync) {
+            const snapshot = getSnapshotSync(getSelector, callsite, SelectorBuilder);
 
-            return snapshot.classNames ? snapshot.classNames.indexOf(name) > -1 : false;
+            return snapshot.classNames ? snapshot.classNames.includes(name) : false;
+        }
+
+        return ReExecutablePromise.fromFn(async () => {
+            const snapshot = await getSnapshot(getSelector, callsite, SelectorBuilder);
+
+            return snapshot.classNames ? snapshot.classNames.includes(name) : false;
         });
     };
 }
 
 function createCounter (getSelector, SelectorBuilder) {
-    var builder  = new SelectorBuilder(getSelector(), { counterMode: true }, { instantiation: 'Selector' });
-    var counter  = builder.getFunction();
-    var callsite = getCallsiteForMethod('get');
+    const builder  = new SelectorBuilder(getSelector(), { counterMode: true }, { instantiation: 'Selector' });
+    const counter  = builder.getFunction();
+    const callsite = getCallsiteForMethod('get');
 
     return async () => {
         try {
@@ -218,29 +372,52 @@ function createCounter (getSelector, SelectorBuilder) {
     };
 }
 
-function addCounterProperties (obj, getSelector, SelectorBuilder) {
+function createCounterSync (getSelector, SelectorBuilder) {
+    const builder  = new SelectorBuilder(getSelector(), { counterMode: true }, { instantiation: 'Selector' });
+    const counter  = builder.getFunction();
+    const callsite = getCallsiteForMethod('get');
+
+    return () => {
+        try {
+            return counter();
+        }
+
+        catch (err) {
+            err.callsite = callsite;
+            throw err;
+        }
+    };
+}
+
+function addCounterProperties ({ obj, getSelector, SelectorBuilder }) {
     Object.defineProperty(obj, 'count', {
         get: () => {
-            var counter = createCounter(getSelector, SelectorBuilder);
+            if (selectorApiExecutionMode.isSync)
+                return createCounterSync(getSelector, SelectorBuilder)();
 
-            return ClientFunctionResultPromise.fromFn(() => counter());
+            const counter = createCounter(getSelector, SelectorBuilder);
+
+            return ReExecutablePromise.fromFn(() => counter());
         }
     });
 
     Object.defineProperty(obj, 'exists', {
         get: () => {
-            var counter = createCounter(getSelector, SelectorBuilder);
+            if (selectorApiExecutionMode.isSync)
+                return createCounterSync(getSelector, SelectorBuilder)() > 0;
 
-            return ClientFunctionResultPromise.fromFn(async () => await counter() > 0);
+            const counter = createCounter(getSelector, SelectorBuilder);
+
+            return ReExecutablePromise.fromFn(async () => await counter() > 0);
         }
     });
 }
 
 function convertFilterToClientFunctionIfNecessary (callsiteName, filter, dependencies) {
     if (typeof filter === 'function') {
-        var builder = filter[clientFunctionBuilderSymbol];
-        var fn      = builder ? builder.fn : filter;
-        var options = builder ? assign({}, builder.options, { dependencies }) : { dependencies };
+        const builder = filter[clientFunctionBuilderSymbol];
+        const fn      = builder ? builder.fn : filter;
+        const options = builder ? assign({}, builder.options, { dependencies }) : { dependencies };
 
         return (new ClientFunctionBuilder(fn, options, { instantiation: callsiteName })).getFunction();
     }
@@ -248,30 +425,37 @@ function convertFilterToClientFunctionIfNecessary (callsiteName, filter, depende
     return filter;
 }
 
-function createDerivativeSelectorWithFilter (getSelector, SelectorBuilder, selectorFn, filter, additionalDependencies) {
-    var collectionModeSelectorBuilder = new SelectorBuilder(getSelector(), { collectionMode: true });
-    var customDOMProperties           = collectionModeSelectorBuilder.options.customDOMProperties;
-    var customMethods                 = collectionModeSelectorBuilder.options.customMethods;
+function createDerivativeSelectorWithFilter ({ getSelector, SelectorBuilder, selectorFn, apiFn, filter, additionalDependencies }) {
+    const collectionModeSelectorBuilder = new SelectorBuilder(getSelector(), { collectionMode: true });
+    const customDOMProperties           = collectionModeSelectorBuilder.options.customDOMProperties;
+    const customMethods                 = collectionModeSelectorBuilder.options.customMethods;
 
-    var dependencies = {
+    let dependencies = {
         selector:    collectionModeSelectorBuilder.getFunction(),
         filter:      filter,
         filterNodes: filterNodes
     };
 
+    const { boundTestRun, timeout, visibilityCheck, apiFnChain } = collectionModeSelectorBuilder.options;
+
     dependencies = assign(dependencies, additionalDependencies);
 
-    var builder = new SelectorBuilder(selectorFn, {
+    const builder = new SelectorBuilder(selectorFn, {
         dependencies,
         customDOMProperties,
-        customMethods
+        customMethods,
+        boundTestRun,
+        timeout,
+        visibilityCheck,
+        apiFnChain,
+        apiFn
     }, { instantiation: 'Selector' });
 
     return builder.getFunction();
 }
 
-var filterByText = convertFilterToClientFunctionIfNecessary('filter', selectorTextFilter);
-var filterByAttr = convertFilterToClientFunctionIfNecessary('filter', selectorAttributeFilter);
+const filterByText = convertFilterToClientFunctionIfNecessary('filter', selectorTextFilter);
+const filterByAttr = convertFilterToClientFunctionIfNecessary('filter', selectorAttributeFilter);
 
 function ensureRegExpContext (str) {
     // NOTE: if a regexp is created in a separate context (via the 'vm' module) we
@@ -282,23 +466,28 @@ function ensureRegExpContext (str) {
     return str;
 }
 
-function addFilterMethods (obj, getSelector, SelectorBuilder) {
-    obj.nth = index => {
-        assertType(is.number, 'nth', '"index" argument', index);
+function addFilterMethods (options) {
+    const { obj, getSelector, SelectorBuilder } = options;
 
-        var builder = new SelectorBuilder(getSelector(), { index: index }, { instantiation: 'Selector' });
+    obj.nth = index => {
+        assertType(is.number, 'nth', 'The "index" argument', index);
+
+        const apiFn   = prepareApiFnArgs('nth', index);
+        const builder = new SelectorBuilder(getSelector(), { index, apiFn }, { instantiation: 'Selector' });
 
         return builder.getFunction();
     };
 
     obj.withText = text => {
-        assertType([is.string, is.regExp], 'withText', '"text" argument', text);
+        assertType([is.string, is.regExp], 'withText', 'The "text" argument', text);
+
+        const apiFn = prepareApiFnArgs('withText', text);
 
         text = ensureRegExpContext(text);
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
-            var nodes = selector();
+            const nodes = selector();
 
             if (!nodes.length)
                 return null;
@@ -307,24 +496,46 @@ function addFilterMethods (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filterByText, {
-            textRe: makeRegExp(text)
-        });
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filterByText, { textRe: makeRegExp(text) });
+
+        return createDerivativeSelectorWithFilter(args);
+    };
+
+    obj.withExactText = text => {
+        assertType(is.string, 'withExactText', 'The "text" argument', text);
+
+        const selectorFn = () => {
+            /* eslint-disable no-undef */
+            const nodes = selector();
+
+            if (!nodes.length)
+                return null;
+
+            return filterNodes(nodes, filter, document, void 0, exactText);
+            /* eslint-enable no-undef */
+        };
+
+        const apiFn = prepareApiFnArgs('withExactText', text);
+        const args  = getDerivativeSelectorArgs(options, selectorFn, apiFn, filterByText, { exactText: text });
+
+        return createDerivativeSelectorWithFilter(args);
     };
 
     obj.withAttribute = (attrName, attrValue) => {
-        assertType([is.string, is.regExp], 'withAttribute', '"attrName" argument', attrName);
+        assertType([is.string, is.regExp], 'withAttribute', 'The "attrName" argument', attrName);
+
+        const apiFn = prepareApiFnArgs('withAttribute', attrName, attrValue);
 
         attrName = ensureRegExpContext(attrName);
 
         if (attrValue !== void 0) {
-            assertType([is.string, is.regExp], 'withAttribute', '"attrValue" argument', attrValue);
+            assertType([is.string, is.regExp], 'withAttribute', 'The "attrValue" argument', attrValue);
             attrValue = ensureRegExpContext(attrValue);
         }
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
-            var nodes = selector();
+            const nodes = selector();
 
             if (!nodes.length)
                 return null;
@@ -333,20 +544,24 @@ function addFilterMethods (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filterByAttr, {
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filterByAttr, {
             attrName,
             attrValue
         });
+
+        return createDerivativeSelectorWithFilter(args);
     };
 
     obj.filter = (filter, dependencies) => {
-        assertType([is.string, is.function], 'filter', '"filter" argument', filter);
+        assertType([is.string, is.function], 'filter', 'The "filter" argument', filter);
+
+        const apiFn = prepareApiFnArgs('filter', filter);
 
         filter = convertFilterToClientFunctionIfNecessary('filter', filter, dependencies);
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
-            var nodes = selector();
+            const nodes = selector();
 
             if (!nodes.length)
                 return null;
@@ -355,53 +570,83 @@ function addFilterMethods (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filter);
+
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filter);
+
+        return createDerivativeSelectorWithFilter(args);
+    };
+
+    obj.filterVisible = () => {
+        const apiFn   = prepareApiFnArgs('filterVisible');
+        const builder = new SelectorBuilder(getSelector(), { filterVisible: true, apiFn }, { instantiation: 'Selector' });
+
+        return builder.getFunction();
+    };
+
+    obj.filterHidden = () => {
+        const apiFn   = prepareApiFnArgs('filterHidden');
+        const builder = new SelectorBuilder(getSelector(), { filterHidden: true, apiFn }, { instantiation: 'Selector' });
+
+        return builder.getFunction();
     };
 }
 
-function addCustomDOMPropertiesMethod (obj, getSelector, SelectorBuilder) {
+function addCustomDOMPropertiesMethod ({ obj, getSelector, SelectorBuilder }) {
     obj.addCustomDOMProperties = customDOMProperties => {
         assertAddCustomDOMPropertiesOptions(customDOMProperties);
 
-        var builder = new SelectorBuilder(getSelector(), { customDOMProperties }, { instantiation: 'Selector' });
+        const builder = new SelectorBuilder(getSelector(), { customDOMProperties }, { instantiation: 'Selector' });
 
         return builder.getFunction();
     };
 }
 
-function addCustomMethodsMethod (obj, getSelector, SelectorBuilder) {
-    obj.addCustomMethods = customMethods => {
-        assertAddCustomMethods(customMethods);
+function addCustomMethodsMethod ({ obj, getSelector, SelectorBuilder }) {
+    obj.addCustomMethods = function (methods, opts) {
+        assertAddCustomMethods(methods, opts);
 
-        var builder = new SelectorBuilder(getSelector(), { customMethods }, { instantiation: 'Selector' });
+        const customMethods = {};
+
+        Object.keys(methods).forEach(methodName => {
+            customMethods[methodName] = {
+                method:         methods[methodName],
+                returnDOMNodes: opts && !!opts.returnDOMNodes
+            };
+        });
+
+        const builder = new SelectorBuilder(getSelector(), { customMethods }, { instantiation: 'Selector' });
 
         return builder.getFunction();
     };
 }
 
-function addHierarchicalSelectors (obj, getSelector, SelectorBuilder) {
+function addHierarchicalSelectors (options) {
+    const { obj } = options;
+
     // Find
     obj.find = (filter, dependencies) => {
-        assertType([is.string, is.function], 'find', '"filter" argument', filter);
+        assertType([is.string, is.function], 'find', 'The "filter" argument', filter);
+
+        const apiFn = prepareApiFnArgs('find', filter);
 
         filter = convertFilterToClientFunctionIfNecessary('find', filter, dependencies);
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
             return expandSelectorResults(selector, node => {
                 if (typeof filter === 'string') {
                     return typeof node.querySelectorAll === 'function' ?
-                           node.querySelectorAll(filter) :
-                           null;
+                        node.querySelectorAll(filter) :
+                        null;
                 }
 
-                var results = [];
+                const results = [];
 
-                var visitNode = currentNode => {
-                    var cnLength = currentNode.childNodes.length;
+                const visitNode = currentNode => {
+                    const cnLength = currentNode.childNodes.length;
 
-                    for (var i = 0; i < cnLength; i++) {
-                        var child = currentNode.childNodes[i];
+                    for (let i = 0; i < cnLength; i++) {
+                        const child = currentNode.childNodes[i];
 
                         results.push(child);
 
@@ -416,22 +661,26 @@ function addHierarchicalSelectors (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filter, { expandSelectorResults });
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filter, { expandSelectorResults });
+
+        return createDerivativeSelectorWithFilter(args);
     };
 
     // Parent
     obj.parent = (filter, dependencies) => {
         if (filter !== void 0)
-            assertType([is.string, is.function, is.number], 'parent', '"filter" argument', filter);
+            assertType([is.string, is.function, is.number], 'parent', 'The "filter" argument', filter);
+
+        const apiFn = prepareApiFnArgs('parent', filter);
 
         filter = convertFilterToClientFunctionIfNecessary('find', filter, dependencies);
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
             return expandSelectorResults(selector, node => {
-                var parents = [];
+                const parents = [];
 
-                for (var parent = node.parentNode; parent; parent = parent.parentNode)
+                for (let parent = node.parentNode; parent; parent = parent.parentNode)
                     parents.push(parent);
 
                 return filter !== void 0 ? filterNodes(parents, filter, document, node) : parents;
@@ -439,24 +688,28 @@ function addHierarchicalSelectors (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filter, { expandSelectorResults });
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filter, { expandSelectorResults });
+
+        return createDerivativeSelectorWithFilter(args);
     };
 
     // Child
     obj.child = (filter, dependencies) => {
         if (filter !== void 0)
-            assertType([is.string, is.function, is.number], 'child', '"filter" argument', filter);
+            assertType([is.string, is.function, is.number], 'child', 'The "filter" argument', filter);
+
+        const apiFn = prepareApiFnArgs('child', filter);
 
         filter = convertFilterToClientFunctionIfNecessary('find', filter, dependencies);
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
             return expandSelectorResults(selector, node => {
-                var childElements = [];
-                var cnLength      = node.childNodes.length;
+                const childElements = [];
+                const cnLength      = node.childNodes.length;
 
-                for (var i = 0; i < cnLength; i++) {
-                    var child = node.childNodes[i];
+                for (let i = 0; i < cnLength; i++) {
+                    const child = node.childNodes[i];
 
                     if (child.nodeType === 1)
                         childElements.push(child);
@@ -467,29 +720,33 @@ function addHierarchicalSelectors (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filter, { expandSelectorResults });
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filter, { expandSelectorResults });
+
+        return createDerivativeSelectorWithFilter(args);
     };
 
     // Sibling
     obj.sibling = (filter, dependencies) => {
         if (filter !== void 0)
-            assertType([is.string, is.function, is.number], 'sibling', '"filter" argument', filter);
+            assertType([is.string, is.function, is.number], 'sibling', 'The "filter" argument', filter);
+
+        const apiFn = prepareApiFnArgs('sibling', filter);
 
         filter = convertFilterToClientFunctionIfNecessary('find', filter, dependencies);
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
             return expandSelectorResults(selector, node => {
-                var parent = node.parentNode;
+                const parent = node.parentNode;
 
                 if (!parent)
                     return null;
 
-                var siblings = [];
-                var cnLength = parent.childNodes.length;
+                const siblings = [];
+                const cnLength = parent.childNodes.length;
 
-                for (var i = 0; i < cnLength; i++) {
-                    var child = parent.childNodes[i];
+                for (let i = 0; i < cnLength; i++) {
+                    const child = parent.childNodes[i];
 
                     if (child.nodeType === 1 && child !== node)
                         siblings.push(child);
@@ -500,30 +757,34 @@ function addHierarchicalSelectors (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filter, { expandSelectorResults });
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filter, { expandSelectorResults });
+
+        return createDerivativeSelectorWithFilter(args);
     };
 
     // Next sibling
     obj.nextSibling = (filter, dependencies) => {
         if (filter !== void 0)
-            assertType([is.string, is.function, is.number], 'nextSibling', '"filter" argument', filter);
+            assertType([is.string, is.function, is.number], 'nextSibling', 'The "filter" argument', filter);
+
+        const apiFn = prepareApiFnArgs('nextSibling', filter);
 
         filter = convertFilterToClientFunctionIfNecessary('find', filter, dependencies);
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
             return expandSelectorResults(selector, node => {
-                var parent = node.parentNode;
+                const parent = node.parentNode;
 
                 if (!parent)
                     return null;
 
-                var siblings  = [];
-                var cnLength  = parent.childNodes.length;
-                var afterNode = false;
+                const siblings = [];
+                const cnLength = parent.childNodes.length;
+                let afterNode  = false;
 
-                for (var i = 0; i < cnLength; i++) {
-                    var child = parent.childNodes[i];
+                for (let i = 0; i < cnLength; i++) {
+                    const child = parent.childNodes[i];
 
                     if (child === node)
                         afterNode = true;
@@ -537,29 +798,33 @@ function addHierarchicalSelectors (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filter, { expandSelectorResults });
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filter, { expandSelectorResults });
+
+        return createDerivativeSelectorWithFilter(args);
     };
 
     // Prev sibling
     obj.prevSibling = (filter, dependencies) => {
         if (filter !== void 0)
-            assertType([is.string, is.function, is.number], 'prevSibling', '"filter" argument', filter);
+            assertType([is.string, is.function, is.number], 'prevSibling', 'The "filter" argument', filter);
+
+        const apiFn = prepareApiFnArgs('prevSibling', filter);
 
         filter = convertFilterToClientFunctionIfNecessary('find', filter, dependencies);
 
-        var selectorFn = () => {
+        const selectorFn = () => {
             /* eslint-disable no-undef */
             return expandSelectorResults(selector, node => {
-                var parent = node.parentNode;
+                const parent = node.parentNode;
 
                 if (!parent)
                     return null;
 
-                var siblings = [];
-                var cnLength = parent.childNodes.length;
+                const siblings = [];
+                const cnLength = parent.childNodes.length;
 
-                for (var i = 0; i < cnLength; i++) {
-                    var child = parent.childNodes[i];
+                for (let i = 0; i < cnLength; i++) {
+                    const child = parent.childNodes[i];
 
                     if (child === node)
                         break;
@@ -573,16 +838,40 @@ function addHierarchicalSelectors (obj, getSelector, SelectorBuilder) {
             /* eslint-enable no-undef */
         };
 
-        return createDerivativeSelectorWithFilter(getSelector, SelectorBuilder, selectorFn, filter, { expandSelectorResults });
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, filter, { expandSelectorResults });
+
+        return createDerivativeSelectorWithFilter(args);
     };
 
+    // ShadowRoot
+    obj.shadowRoot = () => {
+        const apiFn = prepareApiFnArgs('shadowRoot');
+
+        const selectorFn = () => {
+            /* eslint-disable no-undef */
+            return expandSelectorResults(selector, node => {
+                return !node.shadowRoot ? null : [node.shadowRoot];
+            });
+            /* eslint-enable no-undef */
+        };
+
+        const args = getDerivativeSelectorArgs(options, selectorFn, apiFn, void 0, { expandSelectorResults });
+
+        return createDerivativeSelectorWithFilter(args);
+    };
 }
 
-export function addAPI (obj, getSelector, SelectorBuilder, customDOMProperties, customMethods) {
-    addSnapshotPropertyShorthands(obj, getSelector, customDOMProperties, customMethods);
-    addCustomDOMPropertiesMethod(obj, getSelector, SelectorBuilder);
-    addCustomMethodsMethod(obj, getSelector, SelectorBuilder);
-    addFilterMethods(obj, getSelector, SelectorBuilder);
-    addHierarchicalSelectors(obj, getSelector, SelectorBuilder);
-    addCounterProperties(obj, getSelector, SelectorBuilder);
+export function addAPI (selector, getSelector, SelectorBuilder, customDOMProperties, customMethods, observedCallsites, skipSnapshotProperties) {
+    const options = { obj: selector, getSelector, SelectorBuilder, customDOMProperties, customMethods, observedCallsites };
+
+    addFilterMethods(options);
+    addHierarchicalSelectors(options);
+
+    if (!skipSnapshotProperties)
+        addSnapshotPropertyShorthands(options);
+
+    addCustomDOMPropertiesMethod(options);
+    addCustomMethodsMethod(options);
+    addCounterProperties(options);
+    addVisibleProperty(options);
 }

@@ -1,102 +1,188 @@
-import { join as joinPath, dirname } from 'path';
-import sanitizeFilename from 'sanitize-filename';
+import {
+    join as joinPath,
+    dirname,
+    basename
+} from 'path';
+
 import { generateThumbnail } from 'testcafe-browser-tools';
-import { ensureDir } from '../utils/promisified-functions';
+import { cropScreenshot } from './crop';
+import { isInQueue, addToQueue } from '../utils/async-queue';
+import WARNING_MESSAGE from '../notifications/warning-message';
+import escapeUserAgent from '../utils/escape-user-agent';
+import correctFilePath from '../utils/correct-file-path';
+import {
+    readPngFile,
+    stat,
+    writePng
+} from '../utils/promisified-functions';
 
-
-const PNG_EXTENSION_RE = /(\.png)$/;
+import DEFAULT_SCREENSHOT_EXTENSION from './default-extension';
 
 
 export default class Capturer {
-    constructor (baseScreenshotsPath, testEntry, connection, namingOptions) {
-        this.enabled              = !!baseScreenshotsPath;
-        this.baseScreenshotsPath  = baseScreenshotsPath;
-        this.testEntry            = testEntry;
-        this.provider             = connection.provider;
-        this.browserId            = connection.id;
-        this.baseDirName          = namingOptions.baseDirName;
-        this.userAgentName        = namingOptions.userAgentName;
-        this.quarantineAttemptNum = namingOptions.quarantineAttemptNum;
-        this.testIndex            = namingOptions.testIndex;
-        this.screenshotIndex      = 1;
-        this.errorScreenshotIndex = 1;
-
-        var testDirName     = `test-${this.testIndex}`;
-        var screenshotsPath = this.enabled ? joinPath(this.baseScreenshotsPath, this.baseDirName, testDirName) : '';
-
-        this.screenshotsPath         = screenshotsPath;
-        this.screenshotPathForReport = screenshotsPath;
+    constructor (baseScreenshotsPath, testEntry, connection, pathPattern, fullPage, warningLog) {
+        this.enabled             = !!baseScreenshotsPath;
+        this.baseScreenshotsPath = baseScreenshotsPath;
+        this.testEntry           = testEntry;
+        this.provider            = connection.provider;
+        this.browserId           = connection.id;
+        this.warningLog          = warningLog;
+        this.pathPattern         = pathPattern;
+        this.fullPage            = fullPage;
     }
 
-    static _correctFilePath (path) {
-        var correctedPath = path
-            .replace(/\\/g, '/')
-            .split('/')
-            .map(str => sanitizeFilename(str))
-            .join('/');
+    static _getDimensionWithoutScrollbar (fullDimension, documentDimension, bodyDimension) {
+        if (bodyDimension > fullDimension)
+            return documentDimension;
 
-        return PNG_EXTENSION_RE.test(correctedPath) ? correctedPath : `${correctedPath}.png`;
+        if (documentDimension > fullDimension)
+            return bodyDimension;
+
+        return Math.max(documentDimension, bodyDimension);
     }
 
-    _getFileName (forError) {
-        var fileName = `${forError ? this.errorScreenshotIndex : this.screenshotIndex}.png`;
+    static _getCropDimensions (cropDimensions, pageDimensions) {
+        if (!cropDimensions || !pageDimensions)
+            return null;
 
+        const { dpr }                      = pageDimensions;
+        const { top, left, bottom, right } = cropDimensions;
+
+        return {
+            top:    Math.round(top * dpr),
+            left:   Math.round(left * dpr),
+            bottom: Math.round(bottom * dpr),
+            right:  Math.round(right * dpr)
+        };
+    }
+
+    static _getClientAreaDimensions (pageDimensions) {
+        if (!pageDimensions)
+            return null;
+
+        const { innerWidth, documentWidth, bodyWidth, innerHeight, documentHeight, bodyHeight, dpr } = pageDimensions;
+
+        return {
+            width:  Math.floor(Capturer._getDimensionWithoutScrollbar(innerWidth, documentWidth, bodyWidth) * dpr),
+            height: Math.floor(Capturer._getDimensionWithoutScrollbar(innerHeight, documentHeight, bodyHeight) * dpr)
+        };
+    }
+
+    static async _isScreenshotCaptured (screenshotPath) {
+        try {
+            const stats = await stat(screenshotPath);
+
+            return stats.isFile();
+        }
+        catch (e) {
+            return false;
+        }
+    }
+
+    _joinWithBaseScreenshotPath (path) {
+        return joinPath(this.baseScreenshotsPath, path);
+    }
+
+    _incrementFileIndexes (forError) {
         if (forError)
-            this.errorScreenshotIndex++;
+            this.pathPattern.data.errorFileIndex++;
+
         else
-            this.screenshotIndex++;
-
-        return fileName;
+            this.pathPattern.data.fileIndex++;
     }
 
-    _getSreenshotPath (fileName, customPath) {
-        if (customPath)
-            return joinPath(this.baseScreenshotsPath, Capturer._correctFilePath(customPath));
+    _getCustomScreenshotPath (customPath) {
+        const correctedCustomPath = correctFilePath(customPath, DEFAULT_SCREENSHOT_EXTENSION);
 
-        var screenshotPath = this.quarantineAttemptNum !== null ?
-                             joinPath(this.screenshotsPath, `run-${this.quarantineAttemptNum}`) :
-                             this.screenshotsPath;
-
-        return joinPath(screenshotPath, this.userAgentName, fileName);
+        return this._joinWithBaseScreenshotPath(correctedCustomPath);
     }
 
-    async _takeScreenshot (filePath, pageWidth, pageHeight) {
-        await ensureDir(dirname(filePath));
-        await this.provider.takeScreenshot(this.browserId, filePath, pageWidth, pageHeight);
+    _getScreenshotPath (forError) {
+        const path = this.pathPattern.getPath(forError);
+
+        this._incrementFileIndexes(forError);
+
+        return this._joinWithBaseScreenshotPath(path);
     }
 
-    async _capture (forError, pageWidth, pageHeight, customScreenshotPath) {
+    _getThumbnailPath (screenshotPath) {
+        const imageName = basename(screenshotPath);
+        const imageDir  = dirname(screenshotPath);
+
+        return joinPath(imageDir, 'thumbnails', imageName);
+    }
+
+    async _takeScreenshot ({ filePath, pageWidth, pageHeight, fullPage = this.fullPage }) {
+        await this.provider.takeScreenshot(this.browserId, filePath, pageWidth, pageHeight, fullPage);
+    }
+
+    async _capture (forError, { pageDimensions, cropDimensions, markSeed, customPath, fullPage } = {}) {
         if (!this.enabled)
             return null;
 
-        var fileName = this._getFileName(forError);
+        const screenshotPath = customPath ? this._getCustomScreenshotPath(customPath) : this._getScreenshotPath(forError);
+        const thumbnailPath  = this._getThumbnailPath(screenshotPath);
 
-        fileName = forError ? joinPath('errors', fileName) : fileName;
+        if (isInQueue(screenshotPath))
+            this.warningLog.addWarning(WARNING_MESSAGE.screenshotRewritingError, screenshotPath);
 
-        var screenshotPath = this._getSreenshotPath(fileName, customScreenshotPath);
+        await addToQueue(screenshotPath, async () => {
+            const clientAreaDimensions = Capturer._getClientAreaDimensions(pageDimensions);
 
-        await this._takeScreenshot(screenshotPath, pageWidth, pageHeight);
+            const { width: pageWidth, height: pageHeight } = clientAreaDimensions || {};
 
-        await generateThumbnail(screenshotPath);
+            const takeScreenshotOptions = {
+                filePath: screenshotPath,
+                pageWidth,
+                pageHeight,
+                fullPage
+            };
 
-        // NOTE: if test contains takeScreenshot action with custom path
-        // we should specify the most common screenshot folder in report
-        if (customScreenshotPath)
-            this.screenshotPathForReport = this.baseScreenshotsPath;
+            await this._takeScreenshot(takeScreenshotOptions);
 
-        this.testEntry.hasScreenshots = true;
-        this.testEntry.path           = this.screenshotPathForReport;
+            if (!await Capturer._isScreenshotCaptured(screenshotPath))
+                return;
+
+            const image = await readPngFile(screenshotPath);
+
+            const croppedImage = await cropScreenshot(image, {
+                markSeed,
+                clientAreaDimensions,
+                path:           screenshotPath,
+                cropDimensions: Capturer._getCropDimensions(cropDimensions, pageDimensions)
+            });
+
+            if (croppedImage)
+                await writePng(screenshotPath, croppedImage);
+
+            await generateThumbnail(screenshotPath, thumbnailPath);
+        });
+
+        const testRunId         = this.testEntry.testRuns[this.browserId].id;
+        const userAgent         = escapeUserAgent(this.pathPattern.data.parsedUserAgent.prettyUserAgent);
+        const quarantineAttempt = this.pathPattern.data.quarantineAttempt;
+        const takenOnFail       = forError;
+
+        const screenshot = {
+            testRunId,
+            screenshotPath,
+            thumbnailPath,
+            userAgent,
+            quarantineAttempt,
+            takenOnFail
+        };
+
+        this.testEntry.screenshots.push(screenshot);
 
         return screenshotPath;
     }
 
-
-    async captureAction ({ pageWidth, pageHeight, customPath }) {
-        return await this._capture(false, pageWidth, pageHeight, customPath);
+    async captureAction (options) {
+        return await this._capture(false, options);
     }
 
-    async captureError ({ pageWidth, pageHeight }) {
-        return await this._capture(true, pageWidth, pageHeight);
+    async captureError (options) {
+        return await this._capture(true, options);
     }
 }
 

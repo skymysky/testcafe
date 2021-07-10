@@ -1,8 +1,13 @@
 import { Promise } from '../../deps/hammerhead';
 import DriverStatus from '../../status';
-import { createReplicator, FunctionTransform, ClientFunctionNodeTransform } from './replicator';
+import {
+    createReplicator,
+    FunctionTransform,
+    ClientFunctionNodeTransform
+} from './replicator';
+
 import evalFunction from './eval-function';
-import { UncaughtErrorInClientFunctionCode } from '../../../../errors/test-run';
+import { UncaughtErrorInClientFunctionCode } from '../../../../shared/errors';
 
 export default class ClientFunctionExecutor {
     constructor (command) {
@@ -16,7 +21,7 @@ export default class ClientFunctionExecutor {
     getResult () {
         return Promise.resolve()
             .then(() => {
-                var args = this.replicator.decode(this.command.args);
+                const args = this.replicator.decode(this.command.args);
 
                 return this._executeFn(args);
             })
@@ -35,12 +40,10 @@ export default class ClientFunctionExecutor {
                 isCommandResult: true,
                 result:          this.replicator.encode(result)
             }))
-            .catch(err => {
-                return new DriverStatus({
-                    isCommandResult: true,
-                    executionError:  err
-                });
-            });
+            .catch(err => new DriverStatus({
+                isCommandResult: true,
+                executionError:  err
+            }));
     }
 
     //Overridable methods

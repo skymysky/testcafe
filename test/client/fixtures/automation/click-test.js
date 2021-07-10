@@ -1,27 +1,27 @@
-var hammerhead       = window.getTestCafeModule('hammerhead');
-var browserUtils     = hammerhead.utils.browser;
-var featureDetection = hammerhead.utils.featureDetection;
+const hammerhead       = window.getTestCafeModule('hammerhead');
+const browserUtils     = hammerhead.utils.browser;
+const featureDetection = hammerhead.utils.featureDetection;
 
-var testCafeCore = window.getTestCafeModule('testCafeCore');
-var styleUtils   = testCafeCore.get('./utils/style');
+const testCafeCore = window.getTestCafeModule('testCafeCore');
+const styleUtils   = testCafeCore.styleUtils;
 
-var testCafeAutomation = window.getTestCafeModule('testCafeAutomation');
-var getOffsetOptions   = testCafeAutomation.getOffsetOptions;
-var ClickAutomation    = testCafeAutomation.Click;
-var ClickOptions       = testCafeAutomation.get('../../test-run/commands/options').ClickOptions;
+const testCafeAutomation = window.getTestCafeModule('testCafeAutomation');
+const getOffsetOptions   = testCafeAutomation.getOffsetOptions;
+const ClickAutomation    = testCafeAutomation.Click;
+const ClickOptions       = testCafeAutomation.ClickOptions;
 
 testCafeCore.preventRealEvents();
 
 $(document).ready(function () {
-    var $el = null;
+    let $el = null;
 
     //constants
-    var TEST_ELEMENT_CLASS       = 'testElement';
-    var TEST_DIV_CONTAINER_CLASS = 'testContainer';
+    const TEST_ELEMENT_CLASS       = 'testElement';
+    const TEST_DIV_CONTAINER_CLASS = 'testContainer';
 
     //utils
-    var addInputElement = function (type, id, x, y) {
-        var elementString = ['<input type="', type, '" id="', id, '" value="', id, '" />'].join('');
+    const addInputElement = function (type, id, x, y) {
+        const elementString = ['<input type="', type, '" id="', id, '" value="', id, '" />'].join('');
 
         return $(elementString)
             .css({
@@ -34,11 +34,11 @@ $(document).ready(function () {
             .appendTo('body');
     };
 
-    var createDiv = function () {
+    const createDiv = function () {
         return $('<div />');
     };
 
-    var addDiv = function (x, y) {
+    const addDiv = function (x, y) {
         return createDiv()
             .css({
                 position: 'absolute',
@@ -52,7 +52,7 @@ $(document).ready(function () {
             .appendTo('body');
     };
 
-    var addContainer = function (width, height, outerElement) {
+    const addContainer = function (width, height, outerElement) {
         return createDiv()
             .css({
                 border:   '1px solid black',
@@ -66,7 +66,7 @@ $(document).ready(function () {
             .appendTo(outerElement);
     };
 
-    var startNext = function () {
+    const startNext = function () {
         if (browserUtils.isIE) {
             removeTestElements();
             window.setTimeout(start, 30);
@@ -75,8 +75,39 @@ $(document).ready(function () {
             start();
     };
 
-    var removeTestElements = function () {
+    const removeTestElements = function () {
         $('.' + TEST_ELEMENT_CLASS).remove();
+    };
+
+    const preventEventAndClick = function (eventNameToPrevent) {
+        const raisedEvents = [];
+
+        const events = [
+            'ontouchstart',
+            'ontouchend',
+            'ontouchmove',
+            'onmousedown',
+            'onmousemove',
+            'onmouseup',
+            'onclick'
+        ];
+
+        events.forEach(function (eventName) {
+            $el[0][eventName] = function (e) {
+                if (eventName === eventNameToPrevent)
+                    e.preventDefault();
+
+                raisedEvents.push(eventName);
+            };
+        });
+
+        const click = new ClickAutomation($el[0], new ClickOptions());
+
+        return click
+            .run()
+            .then(function () {
+                return raisedEvents;
+            });
     };
 
     $('<div></div>').css({ width: 1, height: 1500, position: 'absolute' }).appendTo('body');
@@ -95,9 +126,9 @@ $(document).ready(function () {
     module('dom events tests');
 
     asyncTest('mouse events raised', function () {
-        var mousedownRaised = false;
-        var mouseupRaised   = false;
-        var clickRaised     = false;
+        let mousedownRaised = false;
+        let mouseupRaised   = false;
+        let clickRaised     = false;
 
 
         $el.mousedown(function () {
@@ -115,7 +146,7 @@ $(document).ready(function () {
             ok(mousedownRaised && mouseupRaised, 'click event was raised third ');
         });
 
-        var click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -127,9 +158,9 @@ $(document).ready(function () {
 
     if (!featureDetection.isTouchDevice) {
         asyncTest('over and move events on elements during moving', function () {
-            var overed  = false;
-            var entered = false;
-            var moved   = false;
+            let overed  = false;
+            let entered = false;
+            let moved   = false;
 
             $el
                 .css({
@@ -148,7 +179,7 @@ $(document).ready(function () {
                     moved = true;
                 });
 
-            var click = new ClickAutomation($el[0], new ClickOptions());
+            const click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
             click
                 .run()
@@ -162,17 +193,17 @@ $(document).ready(function () {
     module('click on scrollable element in some scrolled containers');
 
     asyncTest('scroll down and click with offset', function () {
-        var clicked = false;
+        let clicked = false;
 
         removeTestElements();
 
-        var $div1            = addContainer(500, 200, 'body');
-        var $div2            = addContainer(450, 510, $div1);
-        var $div3            = addContainer(400, 620, $div2);
-        var $div4            = addContainer(350, 1230, $div3);
-        var offsetY          = 2350;
-        var containerBorders = styleUtils.getBordersWidth($div4[0]);
-        var containerPadding = styleUtils.getElementPadding($div4[0]);
+        const $div1            = addContainer(500, 200, 'body');
+        const $div2            = addContainer(450, 510, $div1);
+        const $div3            = addContainer(400, 620, $div2);
+        const $div4            = addContainer(350, 1230, $div3);
+        const offsetY          = 2350;
+        const containerBorders = styleUtils.getBordersWidth($div4[0]);
+        const containerPadding = styleUtils.getElementPadding($div4[0]);
 
         createDiv()
             .addClass(TEST_ELEMENT_CLASS)
@@ -197,7 +228,7 @@ $(document).ready(function () {
             })
             .appendTo($div4);
 
-        var click = new ClickAutomation($div4[0], new ClickOptions({ offsetX: 100, offsetY: offsetY }));
+        const click = new ClickAutomation($div4[0], new ClickOptions({ offsetX: 100, offsetY: offsetY }));
 
         click
             .run()
@@ -207,18 +238,63 @@ $(document).ready(function () {
             });
     });
 
+    asyncTest('an active input should be blurred and a parent of a disabled input should be focused after a click on the disabled input', function () {
+        const activeInput         = document.createElement('input');
+        const disabledInput       = document.createElement('input');
+        const disabledInputParent = document.createElement('div');
+
+        disabledInput.setAttribute('disabled', 'disabled');
+        disabledInputParent.setAttribute('tabindex', '0');
+
+        activeInput.className = disabledInputParent.className = TEST_ELEMENT_CLASS;
+
+        document.body.appendChild(activeInput);
+        document.body.appendChild(disabledInputParent);
+        disabledInputParent.appendChild(disabledInput);
+
+        let isActiveInputFocused         = false;
+        let isActiveInputBlurred         = false;
+        let isDisabledInputParentFocused = false;
+
+        activeInput.onfocus = function () {
+            isActiveInputFocused = true;
+        };
+
+        activeInput.onblur = function () {
+            isActiveInputBlurred = true;
+        };
+
+        disabledInputParent.onfocus = function () {
+            isDisabledInputParentFocused = true;
+        };
+
+        activeInput.focus();
+
+        const click = new ClickAutomation(disabledInput, new ClickOptions({ offsetX: 5, offsetY: 5 }));
+
+        click
+            .run()
+            .then(function () {
+                ok(isActiveInputFocused);
+                ok(isActiveInputBlurred);
+                ok(isDisabledInputParentFocused);
+
+                startNext();
+            });
+    });
+
     asyncTest('scroll up and click with offset', function () {
-        var clicked = false;
+        let clicked = false;
 
         removeTestElements();
 
-        var $div1            = addContainer(500, 200, 'body');
-        var $div2            = addContainer(450, 510, $div1);
-        var $div3            = addContainer(400, 620, $div2);
-        var $div4            = addContainer(350, 1230, $div3);
-        var offsetY          = 50;
-        var containerBorders = styleUtils.getBordersWidth($div4[0]);
-        var containerPadding = styleUtils.getElementPadding($div4[0]);
+        const $div1            = addContainer(500, 200, 'body');
+        const $div2            = addContainer(450, 510, $div1);
+        const $div3            = addContainer(400, 620, $div2);
+        const $div4            = addContainer(350, 1230, $div3);
+        const offsetY          = 50;
+        const containerBorders = styleUtils.getBordersWidth($div4[0]);
+        const containerPadding = styleUtils.getElementPadding($div4[0]);
 
         createDiv()
             .addClass(TEST_ELEMENT_CLASS)
@@ -248,7 +324,7 @@ $(document).ready(function () {
         $div3.scrollTop(322);
         $div4.scrollTop(1186);
 
-        var click = new ClickAutomation($div4[0], new ClickOptions({ offsetX: 100, offsetY: offsetY }));
+        const click = new ClickAutomation($div4[0], new ClickOptions({ offsetX: 100, offsetY: offsetY }));
 
         click
             .run()
@@ -260,17 +336,96 @@ $(document).ready(function () {
 
     module('other functional tests');
 
-    asyncTest('click on element in scrolled container', function () {
-        var clicked = false;
+    asyncTest('scroll to already visible element', function () {
+        removeTestElements();
 
-        var $div = addDiv(200, 200)
+        addContainer(1, 5000, 'body');
+
+        const target = addContainer(20, 10, 'body');
+
+        addContainer(1, 5000, 'body');
+
+        target.css({
+            backgroundColor: '#ff0000'
+        });
+
+        hammerhead.nativeMethods.scrollTo.call(window, 0, 5050);
+
+        const click = new ClickAutomation(target[0], {
+            offsetX: 10,
+            offsetY: 5
+        });
+
+        const windowY = styleUtils.getScrollTop(document);
+
+        setTimeout(function () {
+            click
+                .run()
+                .then(function () {
+                    equal(styleUtils.getScrollTop(document), windowY, 'scroll position should not change');
+                    startNext();
+                });
+        });
+    });
+
+    asyncTest('scroll to already visible but obscured element', function () {
+        removeTestElements();
+
+        addContainer(1, 5000, 'body');
+
+        const target = addContainer(20, 10, 'body');
+
+        addContainer(1, 5000, 'body');
+
+        const fixed = addContainer(1000, 1000, 'body');
+        let clicked = false;
+
+        target.css({
+            backgroundColor: '#ff0000'
+        }).bind('mousedown', function () {
+            clicked = true;
+        });
+
+        fixed.css({
+            backgroundColor: '#00ff00',
+            position:        'fixed',
+            top:             1,
+            left:            1,
+            right:           1,
+            height:          100
+        });
+
+        hammerhead.nativeMethods.scrollTo.call(window, 0, 5050);
+
+        const click = new ClickAutomation(target[0], {
+            offsetX: 10,
+            offsetY: 5
+        });
+
+        const windowY = styleUtils.getScrollTop(document);
+
+        setTimeout(function () {
+            click
+                .run()
+                .then(function () {
+                    notEqual(styleUtils.getScrollTop(document), windowY, 'scroll position should change');
+                    ok(clicked, 'click was raised');
+                    startNext();
+                });
+        }, 0);
+    });
+
+    asyncTest('click on element in scrolled container', function () {
+        let clicked = false;
+
+        const $div = addDiv(200, 200)
             .width(150)
             .height(150)
             .css({
                 overflow: 'scroll'
             });
 
-        var $button = $('<input type="button">')
+        const $button = $('<input type="button">')
             .addClass(TEST_ELEMENT_CLASS)
             .css({ marginTop: '400px', marginLeft: '80px' })
             .bind('mousedown', function () {
@@ -278,7 +433,7 @@ $(document).ready(function () {
             })
             .appendTo($div);
 
-        var click = new ClickAutomation($button[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($button[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -289,14 +444,14 @@ $(document).ready(function () {
     });
 
     asyncTest('click after scrolling', function () {
-        var clicked = false;
+        let clicked = false;
 
         $el.css({ 'marginTop': '1000px' })
             .click(function () {
                 clicked = true;
             });
 
-        var click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -304,7 +459,7 @@ $(document).ready(function () {
                 ok(clicked, 'click after scrolling was raised');
 
                 //moving scroll to start position for a next test
-                var restoreScrollClick = new ClickAutomation(addDiv(200, 500)[0], new ClickOptions({
+                const restoreScrollClick = new ClickAutomation(addDiv(200, 500)[0], new ClickOptions({
                     offsetX: 5,
                     offsetY: 5
                 }));
@@ -317,18 +472,18 @@ $(document).ready(function () {
     });
 
     asyncTest('focusing on click', function () {
-        var focused = false;
+        let focused = false;
 
         $el.css({ display: 'none' });
 
-        var $input = addInputElement('text', 'input', 150, 150);
+        const $input = addInputElement('text', 'input', 150, 150);
 
         $input.focus(function () {
             focused = true;
         });
 
 
-        var click = new ClickAutomation($input[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($input[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -339,19 +494,19 @@ $(document).ready(function () {
     });
 
     asyncTest('double click in the same position', function () {
-        var clicksCount = 0;
-        var el          = $el[0];
+        const el        = $el[0];
+        let clicksCount = 0;
 
         $el.click(function () {
             clicksCount++;
         });
 
-        var firstClick = new ClickAutomation(el, new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const firstClick = new ClickAutomation(el, new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         firstClick
             .run()
             .then(function () {
-                var secondClick = new ClickAutomation(el, new ClickOptions({ offsetX: 5, offsetY: 5 }));
+                const secondClick = new ClickAutomation(el, new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
                 return secondClick.run();
             })
@@ -363,15 +518,15 @@ $(document).ready(function () {
     });
 
     asyncTest('click with options keys', function () {
-        var focused = false;
-        var alt     = false;
-        var shift   = false;
-        var ctrl    = false;
-        var meta    = false;
+        let focused = false;
+        let alt     = false;
+        let shift   = false;
+        let ctrl    = false;
+        let meta    = false;
 
         $el.css({ display: 'none' });
 
-        var $input = addInputElement('text', 'input', 150, 150);
+        const $input = addInputElement('text', 'input', 150, 150);
 
         $input.focus(function () {
             focused = true;
@@ -384,7 +539,7 @@ $(document).ready(function () {
             meta  = e.metaKey;
         });
 
-        var click = new ClickAutomation($input[0], new ClickOptions({
+        const click = new ClickAutomation($input[0], new ClickOptions({
             modifiers: {
                 alt:   true,
                 ctrl:  true,
@@ -410,8 +565,8 @@ $(document).ready(function () {
     });
 
     asyncTest('cancel bubble', function () {
-        var divClicked = false;
-        var btnClicked = false;
+        let divClicked = false;
+        let btnClicked = false;
 
         $el.css({ marginTop: '100px', marginLeft: '100px' });
 
@@ -421,7 +576,7 @@ $(document).ready(function () {
             btnClicked     = true;
         };
 
-        var $div = addDiv(100, 100)
+        const $div = addDiv(100, 100)
             .width(150)
             .height(150)
             .click(function () {
@@ -430,7 +585,7 @@ $(document).ready(function () {
 
         $el.appendTo($div);
 
-        var click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -443,10 +598,10 @@ $(document).ready(function () {
     });
 
     asyncTest('click on outer element raises event for inner element', function () {
-        var divClicked = false;
-        var btnClicked = false;
+        let divClicked = false;
+        let btnClicked = false;
 
-        var $div = addDiv(400, 400)
+        const $div = addDiv(400, 400)
             .width(70)
             .height(30)
             .click(function () {
@@ -464,7 +619,7 @@ $(document).ready(function () {
             })
             .appendTo($div);
 
-        var click = new ClickAutomation($div[0], new ClickOptions({ offsetX: 15, offsetY: 15 }));
+        const click = new ClickAutomation($div[0], new ClickOptions({ offsetX: 15, offsetY: 15 }));
 
         click
             .run()
@@ -477,7 +632,7 @@ $(document).ready(function () {
     });
 
     asyncTest('click with positive offsets', function () {
-        var eventPoint = null;
+        let eventPoint = null;
 
         $el.css({
             width:  '100px',
@@ -489,9 +644,9 @@ $(document).ready(function () {
             eventPoint = { x: e.pageX, y: e.pageY };
         });
 
-        var el      = $el[0];
-        var offsets = getOffsetOptions($el[0], 20, 20);
-        var click   = new ClickAutomation($el[0], new ClickOptions({
+        const el      = $el[0];
+        const offsets = getOffsetOptions($el[0], 20, 20);
+        const click   = new ClickAutomation($el[0], new ClickOptions({
             offsetX: offsets.offsetX,
             offsetY: offsets.offsetY
         }));
@@ -499,7 +654,7 @@ $(document).ready(function () {
         click
             .run()
             .then(function () {
-                var expectedPoint = { x: el.offsetLeft + 20, y: el.offsetTop + 20 };
+                const expectedPoint = { x: el.offsetLeft + 20, y: el.offsetTop + 20 };
 
                 deepEqual(eventPoint, expectedPoint, 'event point is correct');
                 startNext();
@@ -507,7 +662,7 @@ $(document).ready(function () {
     });
 
     asyncTest('click with negative offsets', function () {
-        var eventPoint = null;
+        let eventPoint = null;
 
         $el.css({
             width:  '100px',
@@ -519,9 +674,9 @@ $(document).ready(function () {
             eventPoint = { x: e.pageX, y: e.pageY };
         });
 
-        var el      = $el[0];
-        var offsets = getOffsetOptions($el[0], -20, -20);
-        var click   = new ClickAutomation($el[0], new ClickOptions({
+        const el      = $el[0];
+        const offsets = getOffsetOptions($el[0], -20, -20);
+        const click   = new ClickAutomation($el[0], new ClickOptions({
             offsetX: offsets.offsetX,
             offsetY: offsets.offsetY
         }));
@@ -529,7 +684,7 @@ $(document).ready(function () {
         click
             .run()
             .then(function () {
-                var expectedPoint = {
+                const expectedPoint = {
                     x: el.offsetLeft + el.offsetWidth - 20,
                     y: el.offsetTop + el.offsetHeight - 20
                 };
@@ -539,11 +694,135 @@ $(document).ready(function () {
             });
     });
 
+    asyncTest('click on label with custom focus/selection handlers bound to checkbox', function () {
+        let changed = false;
+
+        const textarea = document.createElement('textarea');
+        const checkbox = document.createElement('input');
+        const label    = document.createElement('label');
+
+        document.body.appendChild(textarea);
+        document.body.appendChild(checkbox);
+        document.body.appendChild(label);
+
+        checkbox.id     = 'checkbox';
+        label.innerHTML = 'label';
+
+        textarea.className = TEST_ELEMENT_CLASS;
+        checkbox.className = TEST_ELEMENT_CLASS;
+        label.className    = TEST_ELEMENT_CLASS;
+
+        checkbox.setAttribute('type', 'checkbox');
+        label.setAttribute('for', checkbox.id);
+
+        checkbox.addEventListener('change', function () {
+            changed = !changed;
+        });
+
+        textarea.addEventListener('focus', function () {
+            textarea.setSelectionRange(1, 2);
+        });
+
+        textarea.value = '11';
+
+        textarea.focus();
+
+        const clickAutomation = new ClickAutomation(label, { });
+
+        clickAutomation
+            .run()
+            .then(function () {
+                ok(changed, 'change');
+                ok(checkbox.checked, 'checked');
+
+                return clickAutomation
+                    .run()
+                    .then(function () {
+                        notOk(changed, 'not change');
+                        notOk(checkbox.checked, 'not checked');
+
+                        startNext();
+                    });
+            });
+    });
+
+    if (!browserUtils.isIE) {
+        asyncTest('click and mouseup events should have equal `timeStamp` properties', function () {
+            const target = document.createElement('div');
+
+            target.className    = TEST_ELEMENT_CLASS;
+            target.style.width  = '10px';
+            target.style.height = '10px';
+
+            document.body.appendChild(target);
+
+            let mouseUpTimeStamp = null;
+            let clickTimeStamp   = null;
+
+            target.addEventListener('mouseup', function (e) {
+                mouseUpTimeStamp = e.timeStamp;
+            });
+
+            target.addEventListener('click', function (e) {
+                clickTimeStamp = e.timeStamp;
+            });
+
+            const clickAutomation = new ClickAutomation(target, { });
+
+            return clickAutomation
+                .run()
+                .then(function () {
+                    ok(typeof mouseUpTimeStamp === 'number');
+                    ok(typeof clickTimeStamp === 'number');
+
+                    equal(mouseUpTimeStamp, clickTimeStamp);
+
+                    startNext();
+                });
+        });
+    }
+
+
     module('regression');
 
+    asyncTest('GH-4709 - Fails to click on svg element', function () {
+        const div   = document.createElement('div');
+        let clicked = false;
+
+        div.innerHTML        = '<svg><circle cx=\'50\' cy=\'50\' r=\'40\' stroke=\'black\' stroke-width=\'3\' fill=\'red\'></circle></svg>';
+        div.className        = TEST_ELEMENT_CLASS;
+        div.style.paddingTop = '200px';
+
+        const svg = div.childNodes[0];
+
+        svg.style.width  = '80px';
+        svg.style.height = '80px';
+
+        document.body.appendChild(div);
+
+        svg.addEventListener('click', function () {
+            clicked = true;
+        });
+
+        const clickBody = new ClickAutomation(document.body, { offsetX: 1, offsetY: 1 });
+        const clickSvg  = new ClickAutomation(svg, { offsetX: 40, offsetY: 40 });
+
+        // NOTE: we need to move cursor to any element before the clicking on svg to reproduce the issue
+        clickBody
+            .run()
+            .then(function () {
+                return clickSvg.run();
+            })
+            .then(function () {
+                equal(clicked, true);
+                startNext();
+            });
+    });
+
     asyncTest('Q558721 - Test running hangs if element is hidden in non-scrollable container', function () {
-        var clickRaised = false;
-        var $container  = $('<div></div>')
+        let clickRaised = false;
+
+        const $container  = $('<div></div>')
             .addClass(TEST_ELEMENT_CLASS)
             .css({
                 width:      100,
@@ -554,7 +833,7 @@ $(document).ready(function () {
             })
             .appendTo('body');
 
-        var $button = $('<button>Button</button>')
+        const $button = $('<button>Button</button>')
             .css({
                 position: 'relative',
                 left:     -60
@@ -564,7 +843,7 @@ $(document).ready(function () {
             clickRaised = true;
         });
 
-        var click = new ClickAutomation($button[0], new ClickOptions({ offsetX: 10, offsetY: 10 }));
+        const click = new ClickAutomation($button[0], new ClickOptions({ offsetX: 10, offsetY: 10 }));
 
         click
             .run()
@@ -575,15 +854,15 @@ $(document).ready(function () {
     });
 
     asyncTest('B253520 - Blur event is not raised during click playback if previous active element becomes invisible via css on mousedown handler in IE9', function () {
-        var $input           = $('<input type="text"/>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var $button          = $('<input type="button"/>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var inputBlurHandled = false;
+        const $input           = $('<input type="text"/>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+        const $button          = $('<input type="button"/>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+        let inputBlurHandled   = false;
 
-        var waitUntilCssApply = function () {
+        const waitUntilCssApply = function () {
             if ($input[0].getBoundingClientRect().width > 0) {
-                var timeout      = 2;
-                var startSeconds = (new Date()).getSeconds();
-                var endSeconds   = (startSeconds + timeout) % 60;
+                const timeout      = 2;
+                const startSeconds = (new Date()).getSeconds();
+                const endSeconds   = (startSeconds + timeout) % 60;
 
                 while ($input[0].getBoundingClientRect().width > 0) {
                     if ((new Date()).getSeconds() > endSeconds)
@@ -604,7 +883,7 @@ $(document).ready(function () {
 
         $input[0].focus();
 
-        var click = new ClickAutomation($button[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($button[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -615,8 +894,8 @@ $(document).ready(function () {
     });
 
     asyncTest('mouseup should be called asynchronously after mousedown', function () {
-        var timeoutCalled = false;
-        var mouseupCalled = false;
+        let timeoutCalled = false;
+        let mouseupCalled = false;
 
         $el.bind('mousedown', function () {
             window.setTimeout(function () {
@@ -629,7 +908,7 @@ $(document).ready(function () {
             ok(timeoutCalled, 'check timeout setted in mousedown handler was called before mouseup');
         });
 
-        var click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -640,16 +919,16 @@ $(document).ready(function () {
     });
 
     asyncTest('T163678 - A Click action on a link with a line break does not work', function () {
-        var $box    = $('<div></div>').css('width', '128px').appendTo($('body'));
-        var $link   = $('<a href="javascript:void(0);">why do I have to break</a>').appendTo($box);
-        var clicked = false;
+        const $box    = $('<div></div>').css('width', '128px').appendTo($('body'));
+        const $link   = $('<a href="javascript:void(0);">why do I have to break</a>').appendTo($box);
+        let clicked   = false;
 
         $box.addClass(TEST_ELEMENT_CLASS);
         $link.click(function () {
             clicked = true;
         });
 
-        var click = new ClickAutomation($link[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($link[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -660,12 +939,12 @@ $(document).ready(function () {
     });
 
     asyncTest('T224332 - TestCafe problem with click on links in popup menu (click on link with span inside without offset)', function () {
-        var $box  = $('<div></div>').css('width', '128px').appendTo($('body'));
-        var $link = $('<a href="javascript:void(0);"></a>').appendTo($box);
+        const $box  = $('<div></div>').css('width', '128px').appendTo($('body'));
+        const $link = $('<a href="javascript:void(0);"></a>').appendTo($box);
 
         $('<span>why do I have to break</span>').appendTo($link);
 
-        var clicked = false;
+        let clicked = false;
 
         $('input').remove();
         $box.addClass(TEST_ELEMENT_CLASS);
@@ -674,7 +953,7 @@ $(document).ready(function () {
             clicked = true;
         });
 
-        var click = new ClickAutomation($link[0], new ClickOptions());
+        const click = new ClickAutomation($link[0], new ClickOptions());
 
         click
             .run()
@@ -685,10 +964,11 @@ $(document).ready(function () {
     });
 
     asyncTest('T224332 - TestCafe problem with click on links in popup menu (click on span inside the link without offset)', function () {
-        var $box    = $('<div></div>').css('width', '128px').appendTo($('body'));
-        var $link   = $('<a href="javascript:void(0);"></a>').appendTo($box);
-        var $span   = $('<span>why do I have to break</span>').appendTo($link);
-        var clicked = false;
+        const $box    = $('<div></div>').css('width', '128px').appendTo($('body'));
+        const $link   = $('<a href="javascript:void(0);"></a>').appendTo($box);
+        const $span   = $('<span>why do I have to break</span>').appendTo($link);
+
+        let clicked = false;
 
         $box.addClass(TEST_ELEMENT_CLASS);
 
@@ -696,7 +976,7 @@ $(document).ready(function () {
             clicked = true;
         });
 
-        var click = new ClickAutomation($span[0], new ClickOptions());
+        const click = new ClickAutomation($span[0], new ClickOptions());
 
         click
             .run()
@@ -707,9 +987,9 @@ $(document).ready(function () {
     });
 
     asyncTest('T191183 - pointer event properties are fixed', function () {
-        var mousedownRaised = false;
-        var mouseupRaised   = false;
-        var clickRaised     = false;
+        let mousedownRaised = false;
+        let mouseupRaised   = false;
+        let clickRaised     = false;
 
         $el
             .mousedown(function (e) {
@@ -717,7 +997,7 @@ $(document).ready(function () {
 
                 equal(e.button, 0);
 
-                if (browserUtils.isIE || browserUtils.isFirefox)
+                if (!browserUtils.isSafari)
                     equal(e.buttons, 1);
 
                 ok(!mouseupRaised && !clickRaised, 'mousedown event was raised first');
@@ -727,8 +1007,8 @@ $(document).ready(function () {
 
                 equal(e.button, 0);
 
-                if (browserUtils.isIE || browserUtils.isFirefox)
-                    equal(e.buttons, 1);
+                if (!browserUtils.isSafari)
+                    equal(e.buttons, 0);
 
                 ok(mousedownRaised && !clickRaised, 'mouseup event was raised second');
             })
@@ -737,16 +1017,21 @@ $(document).ready(function () {
 
                 equal(e.button, 0);
 
-                if (browserUtils.isIE || browserUtils.isFirefox)
-                    equal(e.buttons, 1);
+                if (!browserUtils.isSafari)
+                    equal(e.buttons, 0);
 
                 ok(mousedownRaised && mouseupRaised, 'click event was raised third ');
             });
 
-        var pointerHandler = function (e) {
+        const pointerHandler = function (e) {
             equal(e.pointerType, browserUtils.version > 10 ? 'mouse' : 4);
             equal(e.button, 0);
-            equal(e.buttons, 1);
+
+            if (e.type === 'pointerdown')
+                equal(e.buttons, 1);
+
+            if (e.type === 'pointerup')
+                equal(e.buttons, 0);
         };
 
         if (browserUtils.isIE && browserUtils.version > 11) {
@@ -758,15 +1043,14 @@ $(document).ready(function () {
             $el[0].onmspointerup   = pointerHandler;
         }
 
-
-        if (browserUtils.isFirefox || browserUtils.isIE9)
-            expect(10);
-        else if (browserUtils.isIE)
+        if (browserUtils.isIE)
             expect(16);
-        else
+        else if (browserUtils.isSafari)
             expect(7);
+        else
+            expect(10);
 
-        var click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -779,7 +1063,7 @@ $(document).ready(function () {
     asyncTest('T253883 - Playback - It is impossible to type a password', function () {
         $el.css({ display: 'none' });
 
-        var $label = $('<label></label>')
+        const $label = $('<label></label>')
             .attr('for', 'input').addClass(TEST_ELEMENT_CLASS)
             .appendTo('body');
 
@@ -787,12 +1071,12 @@ $(document).ready(function () {
             .addClass(TEST_ELEMENT_CLASS)
             .appendTo($label);
 
-        var $input = $('<input />')
+        const $input = $('<input />')
             .attr('id', 'input')
             .addClass(TEST_ELEMENT_CLASS)
             .appendTo($label);
 
-        var click = new ClickAutomation($input[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+        const click = new ClickAutomation($input[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
         click
             .run()
@@ -803,13 +1087,13 @@ $(document).ready(function () {
     });
 
     asyncTest('T299665 - Incorrect click on image with associated map element in Mozilla', function () {
-        var $map = $('<map name="map"></map>')
+        const $map = $('<map name="map"></map>')
             .appendTo('body')
             .addClass(TEST_ELEMENT_CLASS);
 
-        var $area = $('<area shape="rect" coords="0,0,200,200" title="Area"/>').appendTo($map);
+        const $area = $('<area shape="rect" coords="0,0,200,200" title="Area"/>').appendTo($map);
 
-        var $img = $('<img usemap="#map"/>')
+        const $img = $('<img usemap="#map"/>')
             .attr('src', window.QUnitGlobals.getResourceUrl('../../data/runner/img.png'))
             .css({
                 width:  '200px',
@@ -830,7 +1114,7 @@ $(document).ready(function () {
 
 
         window.setTimeout(function () {
-            var click = new ClickAutomation($area[0], new ClickOptions({ offsetX: 10, offsetY: 10 }));
+            const click = new ClickAutomation($area[0], new ClickOptions({ offsetX: 10, offsetY: 10 }));
 
             click
                 .run()
@@ -845,8 +1129,7 @@ $(document).ready(function () {
     module('touch devices test');
     if (featureDetection.isTouchDevice) {
         asyncTest('touch event on click', function () {
-            var event  = null;
-            var events = {
+            const events = {
                 ontouchstart: false,
                 ontouchend:   false,
                 onmousedown:  false,
@@ -854,31 +1137,31 @@ $(document).ready(function () {
                 onclick:      false
             };
 
-            var bind = function (eventName) {
+            const bind = function (eventName) {
                 $el[0][eventName] = function () {
                     events[eventName] = true;
                 };
             };
 
-            for (event in events)
-                bind(event);
+            Object.keys(events).forEach(bind);
 
-            var click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+            const click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
             click
                 .run()
                 .then(function () {
-                    for (event in events)
+                    Object.keys(events).forEach(function (event) {
                         ok(events[event], event + ' raised');
+                    });
 
                     startNext();
                 });
         });
 
         asyncTest('event touch lists length (T170088)', function () {
-            var raisedEvents = [];
+            const raisedEvents = [];
 
-            var touchEventHandler = function (ev) {
+            const touchEventHandler = function (ev) {
                 raisedEvents.push(ev.type);
                 equal(ev.touches.length, ev.type === 'touchend' ? 0 : 1);
                 equal(ev.targetTouches.length, ev.type === 'touchend' ? 0 : 1);
@@ -887,7 +1170,7 @@ $(document).ready(function () {
 
             $el[0].ontouchstart = $el[0].ontouchmove = $el[0].ontouchend = touchEventHandler;
 
-            var click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
+            const click = new ClickAutomation($el[0], new ClickOptions({ offsetX: 5, offsetY: 5 }));
 
             click
                 .run()
@@ -897,6 +1180,56 @@ $(document).ready(function () {
 
                     startNext();
                 });
+        });
+
+        asyncTest('click should not raise touchmove', function () {
+            const raisedEvents = [];
+
+            const touchEventHandler = function (ev) {
+                raisedEvents.push(ev.type);
+            };
+
+            const element = $el[0];
+
+            document.body.addEventListener('touchmove', touchEventHandler);
+            element.addEventListener('touchmove', touchEventHandler);
+
+            element.addEventListener('touchstart', touchEventHandler);
+            element.addEventListener('touchend', touchEventHandler);
+
+            const click = new ClickAutomation(element, new ClickOptions());
+
+            click
+                .run()
+                .then(function () {
+                    deepEqual(raisedEvents, ['touchstart', 'touchend']);
+
+                    startNext();
+                });
+        });
+
+        asyncTest('mouse or click events should not be raised if touch events were cancelled', function () {
+            const expectedRaisedEvents = ['ontouchstart', 'ontouchend'];
+
+            window.async.series({
+                'ontouchstart': function (cb) {
+                    preventEventAndClick('ontouchstart')
+                        .then(function (actualRaisedEvents) {
+                            deepEqual(actualRaisedEvents, expectedRaisedEvents);
+
+                            cb();
+                        });
+                },
+
+                'ontouchend': function () {
+                    preventEventAndClick('ontouchend')
+                        .then(function (actualRaisedEvents) {
+                            deepEqual(actualRaisedEvents, expectedRaisedEvents);
+
+                            startNext();
+                        });
+                }
+            });
         });
     }
 });

@@ -1,18 +1,19 @@
-var expect                   = require('chai').expect;
-var ActionOptions            = require('../../lib/test-run/commands/options').ActionOptions;
-var OffsetOptions            = require('../../lib/test-run/commands/options').OffsetOptions;
-var MouseOptions             = require('../../lib/test-run/commands/options').MouseOptions;
-var DragToElementOptions     = require('../../lib/test-run/commands/options').DragToElementOptions;
-var ClickOptions             = require('../../lib/test-run/commands/options').ClickOptions;
-var MoveOptions              = require('../../lib/test-run/commands/options').MoveOptions;
-var TypeOptions              = require('../../lib/test-run/commands/options').TypeOptions;
-var ResizeToFitDeviceOptions = require('../../lib/test-run/commands/options').ResizeToFitDeviceOptions;
-var AssertionOptions         = require('../../lib/test-run/commands/options').AssertionOptions;
-var ERROR_TYPE               = require('../../lib/errors/test-run/type');
+const expect                   = require('chai').expect;
+const ActionOptions            = require('../../lib/test-run/commands/options').ActionOptions;
+const OffsetOptions            = require('../../lib/test-run/commands/options').OffsetOptions;
+const ScrollOptions            = require('../../lib/test-run/commands/options').ScrollOptions;
+const MouseOptions             = require('../../lib/test-run/commands/options').MouseOptions;
+const DragToElementOptions     = require('../../lib/test-run/commands/options').DragToElementOptions;
+const ClickOptions             = require('../../lib/test-run/commands/options').ClickOptions;
+const MoveOptions              = require('../../lib/test-run/commands/options').MoveOptions;
+const TypeOptions              = require('../../lib/test-run/commands/options').TypeOptions;
+const ElementScreenshotOptions = require('../../lib/test-run/commands/options').ElementScreenshotOptions;
+const ResizeToFitDeviceOptions = require('../../lib/test-run/commands/options').ResizeToFitDeviceOptions;
+const AssertionOptions         = require('../../lib/test-run/commands/options').AssertionOptions;
 
 // NOTE: chai's throws doesn't perform deep comparison of error objects
 function assertThrow (fn, expectedErr) {
-    var actualErr = null;
+    let actualErr = null;
 
     try {
         fn();
@@ -27,7 +28,7 @@ function assertThrow (fn, expectedErr) {
 describe('Test run command options', function () {
     describe('Construction from object and serialization', function () {
         it('Should create OffsetOptions from object', function () {
-            var options = new OffsetOptions({
+            const options = new OffsetOptions({
                 offsetY: 15,
                 dummy:   false
             }, false);
@@ -39,8 +40,23 @@ describe('Test run command options', function () {
             });
         });
 
+        it('Should create ScrollOptions from object', function () {
+            const options = new ScrollOptions({
+                offsetX: 15,
+                dummy:   false
+            }, false);
+
+            expect(JSON.parse(JSON.stringify(options))).eql({
+                offsetX:          15,
+                offsetY:          null,
+                scrollToCenter:   false,
+                speed:            null,
+                skipParentFrames: false
+            });
+        });
+
         it('Should create MouseOptions from object', function () {
-            var options = new MouseOptions({
+            const options = new MouseOptions({
                 offsetX: 15,
                 dummy:   false,
 
@@ -66,7 +82,7 @@ describe('Test run command options', function () {
         });
 
         it('Should create ClickOptions from object', function () {
-            var options = new ClickOptions({
+            const options = new ClickOptions({
                 offsetX:  15,
                 caretPos: 20,
                 dummy:    false,
@@ -94,7 +110,7 @@ describe('Test run command options', function () {
         });
 
         it('Should create MoveOptions from object', function () {
-            var options = new MoveOptions({
+            const options = new MoveOptions({
                 offsetY:        15,
                 dragOffsetX:    20,
                 dummy:          false,
@@ -109,12 +125,13 @@ describe('Test run command options', function () {
             }, false);
 
             expect(JSON.parse(JSON.stringify(options))).eql({
-                offsetX:        null,
-                offsetY:        15,
-                speed:          20,
-                minMovingTime:  null,
-                holdLeftButton: true,
-                skipScrolling:  false,
+                offsetX:                 null,
+                offsetY:                 15,
+                speed:                   20,
+                minMovingTime:           null,
+                holdLeftButton:          true,
+                skipDefaultDragBehavior: false,
+                skipScrolling:           false,
 
                 modifiers: {
                     ctrl:  true,
@@ -126,7 +143,7 @@ describe('Test run command options', function () {
         });
 
         it('Should create TypeOptions from object', function () {
-            var options = new TypeOptions({
+            const options = new TypeOptions({
                 offsetX:  15,
                 caretPos: 20,
                 replace:  true,
@@ -158,7 +175,7 @@ describe('Test run command options', function () {
         });
 
         it('Should create DragToElementOptions from object', function () {
-            var options = new DragToElementOptions({
+            const options = new DragToElementOptions({
                 offsetX:            15,
                 destinationOffsetX: 20,
                 dummy:              false,
@@ -186,8 +203,42 @@ describe('Test run command options', function () {
             });
         });
 
+        it('Should create ElementScreenshotOptions from object', function () {
+            const options = new ElementScreenshotOptions({
+                scrollTargetX: 42,
+
+                crop: {
+                    left:   146,
+                    bottom: 50
+                },
+
+                includeMargins: true,
+
+                modifiers: {
+                    alt: true
+                }
+            });
+
+            expect(JSON.parse(JSON.stringify(options))).eql({
+                scrollTargetX: 42,
+                scrollTargetY: null,
+                speed:         null,
+
+                crop: {
+                    left:   146,
+                    right:  null,
+                    top:    null,
+                    bottom: 50
+                },
+
+                includeMargins:  true,
+                includeBorders:  true,
+                includePaddings: true
+            });
+        });
+
         it('Should create ResizeToFitDeviceOptions from object', function () {
-            var options = new ResizeToFitDeviceOptions({
+            const options = new ResizeToFitDeviceOptions({
                 portraitOrientation: true,
                 dummy:               false
             }, false);
@@ -198,13 +249,14 @@ describe('Test run command options', function () {
         });
 
         it('Should create AssertionOptions from object', function () {
-            var options = new AssertionOptions({
+            const options = new AssertionOptions({
                 timeout: 100,
                 dummy:   false
             }, false);
 
             expect(JSON.parse(JSON.stringify(options))).eql({
-                timeout: 100
+                timeout:               100,
+                allowUnawaitedPromise: false
             });
         });
     });
@@ -217,7 +269,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionSpeedOptionError,
+                    code:            'E12',
                     actualValue:     'string',
                     optionName:      'speed',
                     callsite:        null
@@ -230,7 +282,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionSpeedOptionError,
+                    code:            'E12',
                     actualValue:     5,
                     optionName:      'speed',
                     callsite:        null
@@ -243,7 +295,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionSpeedOptionError,
+                    code:            'E12',
                     actualValue:     0,
                     optionName:      'speed',
                     callsite:        null
@@ -258,7 +310,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionIntegerOptionError,
+                    code:            'E9',
                     actualValue:     'object',
                     optionName:      'offsetX',
                     callsite:        null
@@ -271,7 +323,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionIntegerOptionError,
+                    code:            'E9',
                     actualValue:     NaN,
                     optionName:      'offsetX',
                     callsite:        null
@@ -284,7 +336,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionIntegerOptionError,
+                    code:            'E9',
                     actualValue:     3.14,
                     optionName:      'offsetX',
                     callsite:        null
@@ -299,7 +351,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionBooleanOptionError,
+                    code:            'E11',
                     actualValue:     'number',
                     optionName:      'modifiers.ctrl',
                     callsite:        null
@@ -312,7 +364,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionBooleanOptionError,
+                    code:            'E11',
                     actualValue:     'number',
                     optionName:      'modifiers.alt',
                     callsite:        null
@@ -325,7 +377,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionBooleanOptionError,
+                    code:            'E11',
                     actualValue:     'number',
                     optionName:      'modifiers.shift',
                     callsite:        null
@@ -338,7 +390,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionBooleanOptionError,
+                    code:            'E11',
                     actualValue:     'number',
                     optionName:      'modifiers.meta',
                     callsite:        null
@@ -353,7 +405,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionPositiveIntegerOptionError,
+                    code:            'E10',
                     actualValue:     -1,
                     optionName:      'caretPos',
                     callsite:        null
@@ -366,7 +418,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionPositiveIntegerOptionError,
+                    code:            'E10',
                     actualValue:     3.14,
                     optionName:      'caretPos',
                     callsite:        null
@@ -381,7 +433,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionBooleanOptionError,
+                    code:            'E11',
                     actualValue:     'number',
                     optionName:      'replace',
                     callsite:        null
@@ -396,7 +448,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionIntegerOptionError,
+                    code:            'E9',
                     actualValue:     'object',
                     optionName:      'destinationOffsetX',
                     callsite:        null
@@ -409,7 +461,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionIntegerOptionError,
+                    code:            'E9',
                     actualValue:     NaN,
                     optionName:      'destinationOffsetY',
                     callsite:        null
@@ -424,7 +476,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionBooleanOptionError,
+                    code:            'E11',
                     actualValue:     'number',
                     optionName:      'portraitOrientation',
                     callsite:        null
@@ -439,7 +491,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionPositiveIntegerOptionError,
+                    code:            'E10',
                     actualValue:     -1,
                     optionName:      'timeout',
                     callsite:        null
@@ -452,7 +504,7 @@ describe('Test run command options', function () {
                 },
                 {
                     isTestCafeError: true,
-                    type:            ERROR_TYPE.actionPositiveIntegerOptionError,
+                    code:            'E10',
                     actualValue:     'string',
                     optionName:      'timeout',
                     callsite:        null

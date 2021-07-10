@@ -1,11 +1,6 @@
-import hammerhead from './deps/hammerhead';
-import testCafeCore from './deps/testcafe-core';
-
-var shadowUI      = hammerhead.shadowUI;
-var nativeMethods = hammerhead.nativeMethods;
-
-var eventUtils = testCafeCore.eventUtils;
-var styleUtils = testCafeCore.styleUtils;
+import { shadowUI, nativeMethods } from './deps/hammerhead';
+import { styleUtils, eventUtils } from './deps/testcafe-core';
+import uiRoot from './ui-root';
 
 
 //Const
@@ -18,21 +13,22 @@ const BACKGROUND_OPACITY_WITH_LOADING_TEXT = 0.8;
 const LOADING_ICON_CLASS = 'loading-icon';
 
 //Globals
-var backgroundDiv  = null;
-var loadingTextDiv = null;
-var loadingIconDiv = null;
-var initialized    = false;
+let backgroundDiv  = null;
+let loadingTextDiv = null;
+let loadingIconDiv = null;
+let initialized    = false;
 
 //Markup
 function createBackground () {
-    var root = shadowUI.getRoot();
+    const root = uiRoot.element();
 
     backgroundDiv = document.createElement('div');
     root.appendChild(backgroundDiv);
     shadowUI.addClass(backgroundDiv, BACKGROUND_CLASS);
 
-    loadingTextDiv             = document.createElement('div');
-    loadingTextDiv.textContent = LOADING_TEXT;
+    loadingTextDiv = document.createElement('div');
+
+    nativeMethods.nodeTextContentSetter.call(loadingTextDiv, LOADING_TEXT);
     root.appendChild(loadingTextDiv);
     shadowUI.addClass(loadingTextDiv, LOADING_TEXT_CLASS);
 
@@ -44,9 +40,9 @@ function createBackground () {
 
 //Behavior
 function adjustLoadingTextPos () {
-    var wHeight           = styleUtils.getHeight(window);
-    var wWidth            = styleUtils.getWidth(window);
-    var loadingTextHidden = !styleUtils.hasDimensions(loadingTextDiv);
+    const wHeight           = styleUtils.getHeight(window);
+    const wWidth            = styleUtils.getWidth(window);
+    const loadingTextHidden = !styleUtils.hasDimensions(loadingTextDiv);
 
     if (loadingTextHidden) {
         styleUtils.set(loadingTextDiv, 'visibility', 'hidden');
@@ -65,9 +61,9 @@ function adjustLoadingTextPos () {
 }
 
 function initSizeAdjustments () {
-    var adjust = function () {
-        var wHeight = styleUtils.getHeight(window);
-        var wWidth  = styleUtils.getWidth(window);
+    const adjust = function () {
+        const wHeight = styleUtils.getHeight(window);
+        const wWidth  = styleUtils.getWidth(window);
 
         styleUtils.set(backgroundDiv, 'width', wWidth + 'px');
         styleUtils.set(backgroundDiv, 'height', wHeight + 'px');
@@ -92,10 +88,10 @@ function init () {
 }
 
 export function initAndShowLoadingText () {
-    var shown = false;
+    let shown = false;
 
     //NOTE: init and show modal background as soon as possible
-    var initAndShow = function () {
+    const initAndShow = function () {
         init();
 
         styleUtils.set(backgroundDiv, 'opacity', BACKGROUND_OPACITY_WITH_LOADING_TEXT);
@@ -105,7 +101,7 @@ export function initAndShowLoadingText () {
         shown = true;
     };
 
-    var tryShowBeforeReady = function () {
+    const tryShowBeforeReady = function () {
         if (!shown) {
             if (document.body)
                 initAndShow();

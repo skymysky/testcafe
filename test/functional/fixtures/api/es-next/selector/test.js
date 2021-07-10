@@ -1,8 +1,8 @@
-var expect = require('chai').expect;
+const expect = require('chai').expect;
 
-var DEFAULT_SELECTOR_TIMEOUT = 3000;
-var DEFAULT_RUN_OPTIONS = { selectorTimeout: DEFAULT_SELECTOR_TIMEOUT };
-var DEFAULT_CHROME_RUN_OPTIONS = { only: 'chrome', selectorTimeout: 3000 };
+const DEFAULT_SELECTOR_TIMEOUT   = 3000;
+const DEFAULT_RUN_OPTIONS        = { selectorTimeout: DEFAULT_SELECTOR_TIMEOUT };
+const DEFAULT_CHROME_RUN_OPTIONS = { only: 'chrome', selectorTimeout: DEFAULT_SELECTOR_TIMEOUT };
 
 describe('[API] Selector', function () {
     it('Should provide basic properties in HTMLElement snapshots', function () {
@@ -61,6 +61,10 @@ describe('[API] Selector', function () {
         return runTests('./testcafe-fixtures/selector-test.js', 'Selector `addCustomMethods` method', DEFAULT_RUN_OPTIONS);
     });
 
+    it('Selector `addCustomMethods` method - Selector mode', function () {
+        return runTests('./testcafe-fixtures/selector-test.js', 'Selector `addCustomMethods` method - Selector mode', DEFAULT_RUN_OPTIONS);
+    });
+
     it('Should wait for element to appear on new page', function () {
         return runTests('./testcafe-fixtures/selector-test.js', 'Element on new page', DEFAULT_RUN_OPTIONS);
     });
@@ -77,6 +81,10 @@ describe('[API] Selector', function () {
         return runTests('./testcafe-fixtures/selector-test.js', 'Selector "withText" method', DEFAULT_CHROME_RUN_OPTIONS);
     });
 
+    it('Should filter results with `withExactText()` method', function () {
+        return runTests('./testcafe-fixtures/selector-test.js', 'Selector "withExactText" method', DEFAULT_CHROME_RUN_OPTIONS);
+    });
+
     it('Should filter results with `withAttribute()` method', function () {
         return runTests('./testcafe-fixtures/selector-test.js', 'Selector "withAttribute" method', DEFAULT_CHROME_RUN_OPTIONS);
     });
@@ -87,6 +95,14 @@ describe('[API] Selector', function () {
 
     it('Should filter using combination of filter methods', function () {
         return runTests('./testcafe-fixtures/selector-test.js', 'Combination of filter methods', DEFAULT_CHROME_RUN_OPTIONS);
+    });
+
+    it('Should provide methods for filtering by visibility for plain structure of HTML elements', function () {
+        return runTests('./testcafe-fixtures/selector-test.js', 'Selector `filterVisible/filterHidden` methods with plain structure', DEFAULT_RUN_OPTIONS);
+    });
+
+    it('Should provide methods for filtering by visibility for hierarchical structure of HTML elements', function () {
+        return runTests('./testcafe-fixtures/selector-test.js', 'Selector `filterVisible/filterHidden` methods with hierarchical structure', DEFAULT_RUN_OPTIONS);
     });
 
     it('Should provide .find() method', function () {
@@ -105,8 +121,30 @@ describe('[API] Selector', function () {
         return runTests('./testcafe-fixtures/selector-test.js', 'Selector "sibling" method', DEFAULT_RUN_OPTIONS);
     });
 
-    it('Should provide .nextSibling() method', function () {
-        return runTests('./testcafe-fixtures/selector-test.js', 'Selector "nextSibling" method', DEFAULT_RUN_OPTIONS);
+    it('Selector "shadowRoot" method - children are found', function () {
+        return runTests('./testcafe-fixtures/selector-test.js', 'Selector "shadowRoot" method - children are found', Object.assign({ skip: ['ie', 'edge'] }, DEFAULT_RUN_OPTIONS));
+    });
+
+    it('Selector "shadowRoot" method - shadow root not found', function () {
+        return runTests('./testcafe-fixtures/selector-test.js', 'Selector "shadowRoot" method - shadow root not found', Object.assign({ shouldFail: true, skip: ['ie', 'edge'] }, DEFAULT_RUN_OPTIONS))
+            .catch(function (errs) {
+                expect(errs[0]).contains('The specified selector does not match any element in the DOM tree.');
+                expect(errs[0]).contains('| Selector(\'p\')');
+                expect(errs[0]).contains('> |   .shadowRoot()');
+                expect(errs[0]).contains('|   .find(\'div\')');
+            });
+    });
+
+    it('Selector "shadowRoot" method - content property', function () {
+        return runTests('./testcafe-fixtures/selector-test.js', 'Selector "shadowRoot" method - content property', Object.assign({ skip: ['ie', 'edge'] }, DEFAULT_RUN_OPTIONS));
+    });
+
+    it('Cannot use "shadowRoot" as a target', function () {
+        return runTests('./testcafe-fixtures/selector-test.js', 'Cannot use "shadowRoot" as a target', Object.assign({ shouldFail: true, skip: ['ie', 'edge'] }, DEFAULT_RUN_OPTIONS))
+            .catch(function (errs) {
+                expect(errs[0]).contains('The specified selector is expected to match a DOM element, but it matches a document fragment node.');
+                expect(errs[0]).contains('> 1115 |    await t.click(shadowRoot);');
+            });
     });
 
     it('Should provide .prevSibling() method', function () {
@@ -127,6 +165,10 @@ describe('[API] Selector', function () {
 
     it('Should provide hasAttribute method', function () {
         return runTests('./testcafe-fixtures/selector-test.js', 'hasAttribute method', DEFAULT_RUN_OPTIONS);
+    });
+
+    it('Should not fail on accessing "visible" property for a non-existing element (GH-2386)', () => {
+        return runTests('./testcafe-fixtures/selector-visible-test.js', null, DEFAULT_RUN_OPTIONS);
     });
 
     describe('Errors', function () {
@@ -156,8 +198,9 @@ describe('[API] Selector', function () {
                 only:       'chrome'
             }).catch(function (errs) {
                 expect(errs[0].indexOf(
-                    'Selector is expected to be initialized with a function, CSS selector string, another Selector, ' +
-                    'node snapshot or a Promise returned by a Selector, but number was passed.'
+                    'Cannot initialize a Selector because Selector is number, ' +
+                    'and not one of the following: a CSS selector string, a Selector object, a node snapshot, ' +
+                    'a function, or a Promise returned by a Selector.'
                 )).eql(0);
 
                 expect(errs[0]).contains('> 19 |    await Selector(123)();');
@@ -171,7 +214,8 @@ describe('[API] Selector', function () {
             })
                 .catch(function (errs) {
                     expect(errs[0]).contains(
-                        'Cannot obtain information about the node because the specified selector does not match any node in the DOM tree.'
+                        'Cannot obtain information about the node because the specified selector does not match any node in the DOM tree.' +
+                        '  > | Selector(\'#someUnknownElement\')'
                     );
                     expect(errs[0]).contains("> 23 |    await Selector('#someUnknownElement').tagName;");
                 });
@@ -184,7 +228,8 @@ describe('[API] Selector', function () {
             })
                 .catch(function (errs) {
                     expect(errs[0]).contains(
-                        'Cannot obtain information about the node because the specified selector does not match any node in the DOM tree.'
+                        'Cannot obtain information about the node because the specified selector does not match any node in the DOM tree.' +
+                        '  > | Selector(\'#someUnknownElement\')'
                     );
                     expect(errs[0]).contains("> 27 |    await Selector('#someUnknownElement').getStyleProperty('width');");
                 });
@@ -265,10 +310,24 @@ describe('[API] Selector', function () {
                     only:       'chrome'
                 })
                     .catch(function (errs) {
-                        expect(errs[0]).contains(
-                            'An error occurred in customMethod code:  Error: test'
-                        );
+                        expect(errs[0]).contains('An error occurred in customMethod code:');
+                        expect(errs[0]).contains('Error: test');
                         expect(errs[0]).contains('> 63 |    await el.customMethod();');
+                    });
+            }
+        );
+
+        it('Should raise error if custom method throws an error - Selector mode',
+            function () {
+                return runTests('./testcafe-fixtures/selector-error-test.js', 'Add custom method - method throws an error - Selector mode', {
+                    shouldFail: true,
+                    only:       'chrome'
+                })
+                    .catch(function (errs) {
+                        expect(errs[0]).contains(
+                            'An error occurred in Selector code:  Error: test'
+                        );
+                        expect(errs[0]).contains('> 73 |    await el.customMethod()();');
                     });
             }
         );

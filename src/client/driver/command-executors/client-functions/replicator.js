@@ -1,19 +1,24 @@
 import Replicator from 'replicator';
 import evalFunction from './eval-function';
-import { NodeSnapshot, ElementSnapshot } from './selector-executor/node-snapshots';
-import { DomNodeClientFunctionResultError, UncaughtErrorInCustomDOMPropertyCode } from '../../../../errors/test-run';
+import {
+    NodeSnapshot,
+    ElementSnapshot,
+    ElementActionSnapshot
+} from './selector-executor/node-snapshots';
+
+import { DomNodeClientFunctionResultError, UncaughtErrorInCustomDOMPropertyCode } from '../../../../shared/errors';
 import hammerhead from '../../deps/hammerhead';
 
 // NOTE: save original ctors because they may be overwritten by page code
-var Node     = window.Node;
-var identity = val => val;
+const Node     = window.Node;
+const identity = val => val;
 
 export function createReplicator (transforms) {
     // NOTE: we will serialize replicator results
     // to JSON with a command or command result.
     // Therefore there is no need to do additional job here,
     // so we use identity functions for serialization.
-    var replicator = new Replicator({
+    const replicator = new Replicator({
         serialize:   identity,
         deserialize: identity
     });
@@ -34,8 +39,27 @@ export class FunctionTransform {
         return '';
     }
 
-    fromSerializable ({ fnCode, dependencies }) {
+    // HACK: UglifyJS + TypeScript + argument destructuring can generate incorrect code.
+    // So we have to use plain assignments here.
+    fromSerializable (opts) {
+        const fnCode       = opts.fnCode;
+        const dependencies = opts.dependencies;
+
         return evalFunction(fnCode, dependencies);
+    }
+}
+
+export class SelectorElementActionTransform {
+    constructor () {
+        this.type = 'Node';
+    }
+
+    shouldTransform (type, val) {
+        return val instanceof Node;
+    }
+
+    toSerializable (node) {
+        return new ElementActionSnapshot(node);
     }
 }
 
@@ -61,7 +85,7 @@ export class SelectorNodeTransform {
     }
 
     toSerializable (node) {
-        var snapshot = node.nodeType === 1 ? new ElementSnapshot(node) : new NodeSnapshot(node);
+        const snapshot = node.nodeType === 1 ? new ElementSnapshot(node) : new NodeSnapshot(node);
 
         this._extend(snapshot, node);
 

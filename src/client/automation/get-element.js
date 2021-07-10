@@ -2,15 +2,17 @@ import hammerhead from './deps/hammerhead';
 import testCafeCore from './deps/testcafe-core';
 import testCafeUI from './deps/testcafe-ui';
 import cursor from './cursor';
+import isIframeWindow from '../../utils/is-window-in-iframe';
 
-var browserUtils  = hammerhead.utils.browser;
-var Promise       = hammerhead.Promise;
-var positionUtils = testCafeCore.positionUtils;
-var domUtils      = testCafeCore.domUtils;
+const browserUtils  = hammerhead.utils.browser;
+const Promise       = hammerhead.Promise;
+const nativeMethods = hammerhead.nativeMethods;
+const positionUtils = testCafeCore.positionUtils;
+const domUtils      = testCafeCore.domUtils;
 
 
 function getElementFromPoint (x, y, underTopShadowUIElement) {
-    var topElement = null;
+    let topElement = null;
 
     return testCafeUI.hide(underTopShadowUIElement)
         .then(() => {
@@ -22,14 +24,15 @@ function getElementFromPoint (x, y, underTopShadowUIElement) {
 }
 
 function ensureImageMap (imgElement, areaElement) {
-    var mapElement = domUtils.closest(areaElement, 'map');
+    const mapElement = domUtils.closest(areaElement, 'map');
 
     return mapElement && mapElement.name === imgElement.useMap.substring(1) ? areaElement : imgElement;
 }
 
 function findElementOrNonEmptyChildFromPoint (x, y, element) {
-    var topElement      = positionUtils.getElementFromPoint(x, y);
-    var isNonEmptyChild = domUtils.containsElement(element, topElement) && topElement.textContent.length;
+    const topElement      = positionUtils.getElementFromPoint(x, y);
+    const isNonEmptyChild = domUtils.containsElement(element, topElement) &&
+                          nativeMethods.nodeTextContentGetter.call(topElement).length;
 
     if (topElement && topElement === element || isNonEmptyChild)
         return topElement;
@@ -38,12 +41,12 @@ function findElementOrNonEmptyChildFromPoint (x, y, element) {
 }
 
 function correctTopElementByExpectedElement (topElement, expectedElement) {
-    var expectedElementDefined = expectedElement && domUtils.isDomElement(expectedElement);
+    const expectedElementDefined = expectedElement && domUtils.isDomElement(expectedElement);
 
     if (!expectedElementDefined || !topElement || topElement === expectedElement)
         return topElement;
 
-    var isTREFElement = domUtils.getTagName(expectedElement) === 'tref';
+    const isTREFElement = domUtils.getTagName(expectedElement) === 'tref';
 
     // NOTE: 'document.elementFromPoint' can't find these types of elements
     if (isTREFElement)
@@ -52,27 +55,27 @@ function correctTopElementByExpectedElement (topElement, expectedElement) {
     // NOTE: T299665 - Incorrect click automation for images with an associated map element in Firefox
     // All browsers return the <area> element from document.getElementFromPoint, but
     // Firefox returns the <img> element. We should accomplish this for Firefox as well.
-    var isImageMapArea = domUtils.getTagName(expectedElement) === 'area' && domUtils.isImgElement(topElement);
+    const isImageMapArea = domUtils.getTagName(expectedElement) === 'area' && domUtils.isImgElement(topElement);
 
     if (browserUtils.isFirefox && isImageMapArea)
         return ensureImageMap(topElement, expectedElement);
 
 
     // NOTE: try to find a multi-line link by its rectangle (T163678)
-    var isLinkOrChildExpected = domUtils.isAnchorElement(expectedElement) ||
+    const isLinkOrChildExpected = domUtils.isAnchorElement(expectedElement) ||
                                 domUtils.getParents(expectedElement, 'a').length;
 
-    var isTopElementChildOfLink = isLinkOrChildExpected &&
+    const isTopElementChildOfLink = isLinkOrChildExpected &&
                                   domUtils.containsElement(expectedElement, topElement) &&
-                                  topElement.textContent.length;
+                                  nativeMethods.nodeTextContentGetter.call(topElement).length;
 
-    var shouldSearchForMultilineLink = isLinkOrChildExpected && !isTopElementChildOfLink &&
-                                       expectedElement.textContent.length;
+    const shouldSearchForMultilineLink = isLinkOrChildExpected && !isTopElementChildOfLink &&
+                                       nativeMethods.nodeTextContentGetter.call(expectedElement).length;
 
     if (!shouldSearchForMultilineLink)
         return topElement;
 
-    var linkRect = expectedElement.getBoundingClientRect();
+    const linkRect = expectedElement.getBoundingClientRect();
 
     return findElementOrNonEmptyChildFromPoint(linkRect.right - 1, linkRect.top + 1, expectedElement) ||
            findElementOrNonEmptyChildFromPoint(linkRect.left + 1, linkRect.bottom - 1, expectedElement) ||
@@ -80,8 +83,7 @@ function correctTopElementByExpectedElement (topElement, expectedElement) {
 }
 
 export function fromPoint (x, y, expectedElement) {
-    var isInIframe   = window !== window.top;
-    var foundElement = null;
+    let foundElement = null;
 
     return getElementFromPoint(x, y)
         .then(topElement => {
@@ -90,9 +92,9 @@ export function fromPoint (x, y, expectedElement) {
             // NOTE: when trying to get an element by elementFromPoint in iframe and the target
             // element is under any of shadow-ui elements, you will get null (only in IE).
             // In this case, you should hide a top window's shadow-ui root to obtain an element.
-            var resChain = Promise.resolve(topElement);
+            let resChain = Promise.resolve(topElement);
 
-            if (!foundElement && isInIframe && x > 0 && y > 0) {
+            if (!foundElement && isIframeWindow(window) && x > 0 && y > 0) {
                 resChain = resChain
                     .then(() => getElementFromPoint(x, y, true))
                     .then(element => {
@@ -111,7 +113,7 @@ export function fromPoint (x, y, expectedElement) {
 }
 
 export function underCursor () {
-    var cursorPosition = cursor.position;
+    const cursorPosition = cursor.position;
 
     return fromPoint(cursorPosition.x, cursorPosition.y).then(({ element }) => element);
 }

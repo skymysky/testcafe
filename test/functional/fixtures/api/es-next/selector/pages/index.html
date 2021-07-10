@@ -47,7 +47,7 @@
 
 <script>
     document.querySelector('#createElement').addEventListener('click', function () {
-        var div = document.createElement('div');
+        const div = document.createElement('div');
 
         div.id = 'newElement';
 
@@ -57,7 +57,7 @@
     });
 
     document.querySelector('#makeVisible').addEventListener('click', function () {
-        var div = document.querySelector('#invisibleElement');
+        const div = document.querySelector('#invisibleElement');
 
         window.setTimeout(function () {
             div.style.display = 'block';
@@ -72,7 +72,7 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         window.setTimeout(function () {
-            var div = document.createElement('div');
+            const div = document.createElement('div');
 
             div.id            = 'slowElement';
             div.style.display = 'none';
@@ -92,6 +92,18 @@
 <div id="el3" class="idxEl">Hey?! (yo)</div>
 <div id="el4" class="idxEl">This <script>var yo = 3;</script>is element 4.</div>
 </section>
+
+<div id="withExactText">
+    <div class="should-not-pass">
+        Element with text
+        <div id="passed-0" class="should-pass">Element with text</div>
+        <div id="passed-1" class="should-pass"> Element with text </div>
+        <div id="passed-2" class="should-pass">Element with text<div> </div></div>
+        <div class="should-not-pass">Element with text<div>1</div></div>
+        <div class="should-not-pass">Element with text1</div>
+    </div>
+</div>
+
 <a><b><c></c></b><d>e</d><f><g>h</g></f></a>
 
 <div id="p2" class="parent2">
@@ -125,5 +137,31 @@
     <div id="attr1" data-store="data-attr1" class="attr"></div>
     <div id="attr2" data-store="data-attr2" class="attr"></div>
 </div>
+
+<div id="filterVisiblePlain">
+    <div style="display: none;">displayNone</div>
+    <div style="width: 0; height: 0;">zeroDimensions</div>
+    <div style="visibility: hidden;">visibilityHidden</div>
+    <div>visible</div>
+</div>
+
+<div id="filterVisibleHierarchical">
+    <div style="display: none;">
+        <p class="p" style="display: none;">1</p>
+        <p class="p" style="display: none;">2</p>
+        <p style="display: none;">3</p>
+        <p class="p">4</p>
+        <p>5</p>
+    </div>
+    <div>
+        <p class="p">1</p>
+        <p>2</p>
+        <p>3</p>
+        <p class="p" style="display: none;">4</p>
+        <p class="p">5</p>
+        <p>6</p>
+    </div>
+</div>
+
 </body>
 </html>

@@ -1,21 +1,17 @@
-var sortBy   = require('lodash').sortBy;
-var resolve  = require('path').resolve;
-var Compiler = require('../../../lib/compiler');
+const { sortBy, castArray } = require('lodash');
+const { resolve }           = require('path');
+const Compiler              = require('../../../lib/compiler');
 
-module.exports = function compile (sources) {
-    sources = Array.isArray(sources) ? sources : [sources];
+module.exports = function compile (sources, options) {
+    sources = castArray(sources).map(filename => resolve(filename));
 
-    sources = sources.map(function (filename) {
-        return resolve(filename);
-    });
-
-    var compiler = new Compiler(sources);
+    const compiler = new Compiler(sources, options);
 
     return compiler.getTests()
-        .then(function (tests) {
-            var fixtures = tests
-                .reduce(function (fxtrs, test) {
-                    if (fxtrs.indexOf(test.fixture) < 0)
+        .then(tests => {
+            const fixtures = tests
+                .reduce((fxtrs, test) => {
+                    if (!fxtrs.includes(test.fixture))
                         fxtrs.push(test.fixture);
 
                     return fxtrs;

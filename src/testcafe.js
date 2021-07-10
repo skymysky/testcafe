@@ -1,65 +1,105 @@
-import Promise from 'pinkie';
-import { readSync as read } from 'read-file-relative';
-import { Proxy } from 'testcafe-hammerhead';
-import { CLIENT_RUNNER_SCRIPT as LEGACY_RUNNER_SCRIPT } from 'testcafe-legacy-api';
-import BrowserConnectionGateway from './browser/connection/gateway';
-import BrowserConnection from './browser/connection';
-import browserProviderPool from './browser/provider/pool';
-import Runner from './runner';
+import { GeneralError } from './errors/runtime';
+import { RUNTIME_ERRORS } from './errors/types';
+import CONTENT_TYPES from './assets/content-types';
+import OPTION_NAMES from './configuration/option-names';
+import * as INJECTABLES from './assets/injectables';
 
-// Const
-const CORE_SCRIPT       = read('./client/core/index.js');
-const DRIVER_SCRIPT     = read('./client/driver/index.js');
-const UI_SCRIPT         = read('./client/ui/index.js');
-const AUTOMATION_SCRIPT = read('./client/automation/index.js');
-const UI_STYLE          = read('./client/ui/styles.css');
-const UI_SPRITE         = read('./client/ui/sprite.png', true);
-const FAVICON           = read('./client/ui/favicon.ico', true);
+const lazyRequire              = require('import-lazy')(require);
+const sourceMapSupport         = lazyRequire('source-map-support');
+const hammerhead               = lazyRequire('testcafe-hammerhead');
+const loadAssets               = lazyRequire('./load-assets');
+const errorHandlers            = lazyRequire('./utils/handle-errors');
+const BrowserConnectionGateway = lazyRequire('./browser/connection/gateway');
+const BrowserConnection        = lazyRequire('./browser/connection');
+const browserProviderPool      = lazyRequire('./browser/provider/pool');
+const CompilerHost             = lazyRequire('./services/compiler/host');
+const Runner                   = lazyRequire('./runner');
+const LiveModeRunner           = lazyRequire('./live/test-runner');
 
+// NOTE: CoffeeScript can't be loaded lazily, because it will break stack traces
+require('coffeescript');
 
 export default class TestCafe {
-    constructor (hostname, port1, port2) {
-        this.closed                   = false;
-        this.proxy                    = new Proxy(hostname, port1, port2);
-        this.browserConnectionGateway = new BrowserConnectionGateway(this.proxy);
-        this.runners                  = [];
+    constructor (configuration) {
+        this._setupSourceMapsSupport();
+        errorHandlers.registerErrorHandlers();
 
-        this._registerAssets();
+        const { hostname, port1, port2, options } = configuration.startOptions;
+
+        this.closed                   = false;
+        this.proxy                    = new hammerhead.Proxy(hostname, port1, port2, options);
+        this.browserConnectionGateway = new BrowserConnectionGateway(this.proxy, { retryTestPages: configuration.getOption(OPTION_NAMES.retryTestPages) });
+        this.runners                  = [];
+        this.configuration            = configuration;
+
+        this.compilerService = configuration.getOption(OPTION_NAMES.experimentalCompilerService) ? new CompilerHost() : void 0;
+
+        this._registerAssets(options.developmentMode);
     }
 
-    _registerAssets () {
-        this.proxy.GET('/testcafe-core.js', { content: CORE_SCRIPT, contentType: 'application/x-javascript' });
-        this.proxy.GET('/testcafe-driver.js', { content: DRIVER_SCRIPT, contentType: 'application/x-javascript' });
-        this.proxy.GET('/testcafe-legacy-runner.js', {
-            content:     LEGACY_RUNNER_SCRIPT,
-            contentType: 'application/x-javascript'
-        });
-        this.proxy.GET('/testcafe-automation.js', { content: AUTOMATION_SCRIPT, contentType: 'application/x-javascript' });
-        this.proxy.GET('/testcafe-ui.js', { content: UI_SCRIPT, contentType: 'application/x-javascript' });
-        this.proxy.GET('/testcafe-ui-sprite.png', { content: UI_SPRITE, contentType: 'image/png' });
-        this.proxy.GET('/favicon.ico', { content: FAVICON, contentType: 'image/x-icon' });
+    _registerAssets (developmentMode) {
+        const { favIcon, coreScript, driverScript, uiScript,
+            uiStyle, uiSprite, uiSpriteSvg, automationScript, legacyRunnerScript } = loadAssets(developmentMode);
 
-        this.proxy.GET('/testcafe-ui-styles.css', {
-            content:              UI_STYLE,
-            contentType:          'text/css',
+        this.proxy.GET(INJECTABLES.TESTCAFE_CORE, { content: coreScript, contentType: CONTENT_TYPES.javascript });
+        this.proxy.GET(INJECTABLES.TESTCAFE_DRIVER, { content: driverScript, contentType: CONTENT_TYPES.javascript });
+
+        this.proxy.GET(INJECTABLES.TESTCAFE_LEGACY_RUNNER, {
+            content:     legacyRunnerScript,
+            contentType: CONTENT_TYPES.javascript
+        });
+
+        this.proxy.GET(INJECTABLES.TESTCAFE_AUTOMATION, { content: automationScript, contentType: CONTENT_TYPES.javascript });
+        this.proxy.GET(INJECTABLES.TESTCAFE_UI, { content: uiScript, contentType: CONTENT_TYPES.javascript });
+        this.proxy.GET(INJECTABLES.TESTCAFE_UI_SPRITE, { content: uiSprite, contentType: CONTENT_TYPES.png });
+        this.proxy.GET(INJECTABLES.TESTCAFE_UI_SPRITE_SVG, { content: uiSpriteSvg, contentType: CONTENT_TYPES.svg });
+        this.proxy.GET(INJECTABLES.TESTCAFE_ICON, { content: favIcon, contentType: CONTENT_TYPES.icon });
+
+        this.proxy.GET(INJECTABLES.TESTCAFE_UI_STYLES, {
+            content:              uiStyle,
+            contentType:          CONTENT_TYPES.css,
             isShadowUIStylesheet: true
         });
     }
 
+    _setupSourceMapsSupport () {
+        sourceMapSupport.install({
+            hookRequire:              true,
+            handleUncaughtExceptions: false,
+            environment:              'node'
+        });
+    }
+
+    _createRunner (isLiveMode) {
+        const Ctor      = isLiveMode ? LiveModeRunner : Runner;
+        const newRunner = new Ctor({
+            proxy:                    this.proxy,
+            browserConnectionGateway: this.browserConnectionGateway,
+            configuration:            this.configuration.clone(),
+            compilerService:          this.compilerService
+        });
+
+        this.runners.push(newRunner);
+
+        return newRunner;
+    }
 
     // API
     async createBrowserConnection () {
-        var browserInfo = await browserProviderPool.getBrowserInfo('remote');
+        const browserInfo = await browserProviderPool.getBrowserInfo('remote');
 
         return new BrowserConnection(this.browserConnectionGateway, browserInfo, true);
     }
 
     createRunner () {
-        var newRunner = new Runner(this.proxy, this.browserConnectionGateway);
+        return this._createRunner(false);
+    }
 
-        this.runners.push(newRunner);
+    createLiveModeRunner () {
+        if (this.runners.some(runner => runner instanceof LiveModeRunner))
+            throw new GeneralError(RUNTIME_ERRORS.cannotCreateMultipleLiveModeRunners);
 
-        return newRunner;
+        return this._createRunner(true);
     }
 
     async close () {
@@ -72,7 +112,10 @@ export default class TestCafe {
 
         await browserProviderPool.dispose();
 
-        this.browserConnectionGateway.close();
+        if (this.compilerService)
+            this.compilerService.stop();
+
+        await this.browserConnectionGateway.close();
         this.proxy.close();
     }
 }

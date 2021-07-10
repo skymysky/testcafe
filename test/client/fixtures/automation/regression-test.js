@@ -1,38 +1,41 @@
-var hammerhead       = window.getTestCafeModule('hammerhead');
-var browserUtils     = hammerhead.utils.browser;
-var featureDetection = hammerhead.utils.featureDetection;
-var nativeMethods    = hammerhead.nativeMethods;
+const hammerhead       = window.getTestCafeModule('hammerhead');
+const browserUtils     = hammerhead.utils.browser;
+const featureDetection = hammerhead.utils.featureDetection;
+const nativeMethods    = hammerhead.nativeMethods;
+const Promise          = hammerhead.Promise;
 
-var testCafeCore     = window.getTestCafeModule('testCafeCore');
-var eventUtils       = testCafeCore.get('./utils/event');
-var textSelection    = testCafeCore.get('./utils/text-selection');
-var parseKeySequence = testCafeCore.get('./utils/parse-key-sequence');
+const testCafeCore     = window.getTestCafeModule('testCafeCore');
+const eventUtils       = testCafeCore.eventUtils;
+const positionUtils    = testCafeCore.positionUtils;
+const textSelection    = testCafeCore.textSelection;
+const parseKeySequence = testCafeCore.parseKeySequence;
 
-var testCafeAutomation = window.getTestCafeModule('testCafeAutomation');
+const testCafeAutomation = window.getTestCafeModule('testCafeAutomation');
 
-var ClickOptions = testCafeAutomation.get('../../test-run/commands/options').ClickOptions;
-var TypeOptions  = testCafeAutomation.get('../../test-run/commands/options').TypeOptions;
-var MouseOptions = testCafeAutomation.get('../../test-run/commands/options').MouseOptions;
+const ClickOptions = testCafeAutomation.ClickOptions;
+const TypeOptions  = testCafeAutomation.TypeOptions;
+const MouseOptions = testCafeAutomation.MouseOptions;
 
-var ClickAutomation      = testCafeAutomation.Click;
-var DblClickAutomation   = testCafeAutomation.DblClick;
-var HoverAutomation      = testCafeAutomation.Hover;
-var TypeAutomation       = testCafeAutomation.Type;
-var SelectTextAutomation = testCafeAutomation.SelectText;
-var PressAutomation      = testCafeAutomation.Press;
-var getOffsetOptions     = testCafeAutomation.getOffsetOptions;
+const ClickAutomation      = testCafeAutomation.Click;
+const RClickAutomation     = testCafeAutomation.RClick;
+const DblClickAutomation   = testCafeAutomation.DblClick;
+const HoverAutomation      = testCafeAutomation.Hover;
+const TypeAutomation       = testCafeAutomation.Type;
+const SelectTextAutomation = testCafeAutomation.SelectText;
+const PressAutomation      = testCafeAutomation.Press;
+const getOffsetOptions     = testCafeAutomation.getOffsetOptions;
 
 testCafeCore.preventRealEvents();
 
 $(document).ready(function () {
     //consts
-    var TEST_ELEMENT_CLASS = 'testElement';
+    const TEST_ELEMENT_CLASS = 'testElement';
 
-    //vars
-    var body = $('body')[0];
+    //consts
+    const body = $('body')[0];
 
     //utils
-    var createInput = function (type) {
+    const createInput = function (type) {
         return $('<input>')
             .attr('type', type || 'text')
             .attr('id', 'input')
@@ -40,7 +43,7 @@ $(document).ready(function () {
             .appendTo('body');
     };
 
-    var createButton = function () {
+    const createButton = function () {
         return $('<input type="button">').addClass(TEST_ELEMENT_CLASS).appendTo('body');
     };
 
@@ -51,14 +54,14 @@ $(document).ready(function () {
     if (browserUtils.isIE9)
         $(window.top.document).find('body').css('marginTop', '0px');
 
-    var createDraggable = function (currentWindow, currentDocument, left, top) {
-        var curDocument = currentDocument || document;
+    const createDraggable = function (currentWindow, currentDocument, left, top) {
+        const curDocument = currentDocument || document;
 
         currentWindow = currentWindow || window;
 
-        var lastCursorPosition = null;
+        let lastCursorPosition = null;
 
-        var $draggable = $('<div></div>')
+        const $draggable = $('<div></div>')
             .attr('id', 'draggable')
             .addClass(TEST_ELEMENT_CLASS)
             .css({
@@ -87,7 +90,7 @@ $(document).ready(function () {
             .appendTo($(curDocument).find('body'));
 
         $(curDocument).bind(featureDetection.isTouchDevice ? 'touchmove' : 'mousemove', function (e) {
-            var curMousePos = featureDetection.isTouchDevice ? {
+            const curMousePos = featureDetection.isTouchDevice ? {
                 x: e.originalEvent.targetTouches[0].pageX || e.originalEvent.touches[0].pageX,
                 y: e.originalEvent.targetTouches[0].pageY || e.originalEvent.touches[0].pageY
             } : {
@@ -96,7 +99,7 @@ $(document).ready(function () {
             };
 
             $.each($draggable, function () {
-                var $this = $(this);
+                const $this = $(this);
 
                 if ($(this).data('dragStarted')) {
 
@@ -113,14 +116,15 @@ $(document).ready(function () {
             lastCursorPosition = curMousePos;
         });
 
-        var $window       = $(currentWindow);
-        var windowScrollX = 0;
-        var windowScrollY = 0;
+        const $window = $(currentWindow);
+
+        let windowScrollX = 0;
+        let windowScrollY = 0;
 
 
         $window.scroll(function () {
-            var x = $window.scrollLeft() - windowScrollX;
-            var y = $window.scrollTop() - windowScrollY;
+            const x = $window.scrollLeft() - windowScrollX;
+            const y = $window.scrollTop() - windowScrollY;
 
             windowScrollX = $window.scrollLeft();
             windowScrollY = $window.scrollTop();
@@ -136,7 +140,7 @@ $(document).ready(function () {
         return $draggable;
     };
 
-    var startNext = function () {
+    const startNext = function () {
         if (browserUtils.isIE) {
             removeTestElements();
             window.setTimeout(start, 30);
@@ -145,27 +149,27 @@ $(document).ready(function () {
             start();
     };
 
-    var removeTestElements = function () {
+    const removeTestElements = function () {
         $('.' + TEST_ELEMENT_CLASS).remove();
     };
 
-    var runHoverAutomation = function (element, callback) {
-        var offsets      = getOffsetOptions(element);
-        var hoverOptions = new MouseOptions({
+    const runHoverAutomation = function (element, callback) {
+        const offsets      = getOffsetOptions(element);
+        const hoverOptions = new MouseOptions({
             offsetX: offsets.offsetX,
             offsetY: offsets.offsetY
         });
 
-        var hoverAutomation = new HoverAutomation(element, hoverOptions);
+        const hoverAutomation = new HoverAutomation(element, hoverOptions);
 
         hoverAutomation
             .run()
             .then(callback);
     };
 
-    var runClickAutomation = function (el, options, callback) {
-        var offsets      = getOffsetOptions(el, options.offsetX, options.offsetY);
-        var clickOptions = new ClickOptions({
+    const runClickAutomation = function (el, options, callback) {
+        const offsets      = getOffsetOptions(el, options.offsetX, options.offsetY);
+        const clickOptions = new ClickOptions({
             offsetX:  offsets.offsetX,
             offsetY:  offsets.offsetY,
             caretPos: options.caretPos,
@@ -178,16 +182,16 @@ $(document).ready(function () {
             }
         });
 
-        var clickAutomation = new ClickAutomation(el, clickOptions);
+        const clickAutomation = new ClickAutomation(el, clickOptions);
 
         clickAutomation
             .run()
             .then(callback);
     };
 
-    var runDblClickAutomation = function (el, options, callback) {
-        var offsets      = getOffsetOptions(el, options.offsetX, options.offsetY);
-        var clickOptions = new ClickOptions({
+    const runDblClickAutomation = function (el, options, callback) {
+        const offsets      = getOffsetOptions(el, options.offsetX, options.offsetY);
+        const clickOptions = new ClickOptions({
             offsetX:  offsets.offsetX,
             offsetY:  offsets.offsetY,
             caretPos: options.caretPos,
@@ -200,16 +204,16 @@ $(document).ready(function () {
             }
         });
 
-        var dblClickAutomation = new DblClickAutomation(el, clickOptions);
+        const dblClickAutomation = new DblClickAutomation(el, clickOptions);
 
         dblClickAutomation
             .run()
             .then(callback);
     };
 
-    var runTypeAutomation = function (element, text, options) {
-        var offsets     = getOffsetOptions(element);
-        var typeOptions = new TypeOptions({
+    const runTypeAutomation = function (element, text, options) {
+        const offsets     = getOffsetOptions(element);
+        const typeOptions = new TypeOptions({
             caretPos: options.caretPos,
             replace:  options.replace,
             paste:    options.paste,
@@ -217,7 +221,7 @@ $(document).ready(function () {
             offsetY:  offsets.offsetY
         });
 
-        var typeAutomation = new TypeAutomation(element, text, typeOptions);
+        const typeAutomation = new TypeAutomation(element, text, typeOptions);
 
         return typeAutomation.run();
     };
@@ -231,12 +235,13 @@ $(document).ready(function () {
 
     if (browserUtils.isIE) {
         asyncTest('click on submit button child (B236676)', function () {
-            var $form         = $('<form></form>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-            var $button       = $('<button></button>').attr('type', 'submit').addClass(TEST_ELEMENT_CLASS).appendTo($form);
-            var $img          = $('<img />').attr('alt', 'img').addClass(TEST_ELEMENT_CLASS).appendTo($button);
-            var imgClicked    = false;
-            var buttonClicked = false;
-            var formSubmitted = false;
+            const $form         = $('<form></form>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+            const $button       = $('<button></button>').attr('type', 'submit').addClass(TEST_ELEMENT_CLASS).appendTo($form);
+            const $img          = $('<img />').attr('alt', 'img').addClass(TEST_ELEMENT_CLASS).appendTo($button);
+
+            let imgClicked    = false;
+            let buttonClicked = false;
+            let formSubmitted = false;
 
             $form.submit(function (ev) {
                 formSubmitted = true;
@@ -276,8 +281,9 @@ $(document).ready(function () {
 
     if (!featureDetection.isTouchDevice) {
         asyncTest('B236966 - TESTCafe - onmouseout event is not called during the execution of the method hover.', function () {
-            var $element   = createDraggable(window, document, 200, 200);
-            var firstEvent = null;
+            const $element = createDraggable(window, document, 200, 200);
+
+            let firstEvent = null;
 
             $element.bind('mouseover', function () {
                 if (!firstEvent)
@@ -297,16 +303,16 @@ $(document).ready(function () {
     }
 
     asyncTest('B237084 - Client instance works incorrect after "enter" key has been pressed on the focused control', function () {
-        var getSrcElement = function (ev) {
+        const getSrcElement = function (ev) {
             return ev.srcElement || ev.target;
         };
 
-        var button1 = createButton()[0];
-        var button2 = createButton()[0];
+        const button1 = createButton()[0];
+        const button2 = createButton()[0];
 
-        var documentClickFirstHandlerRaised  = false;
-        var documentClickSecondHandlerRaised = false;
-        var button2ClickHandlerRaised        = false;
+        let documentClickFirstHandlerRaised  = false;
+        let documentClickSecondHandlerRaised = false;
+        let button2ClickHandlerRaised        = false;
 
         document.addEventListener('click', function (ev) {
             if (getSrcElement(ev) === button1) {
@@ -333,32 +339,31 @@ $(document).ready(function () {
         });
     });
 
-    asyncTest('B237672 - TesCafe throw exception "Access is denied" after trying to get content of iframe in IE browsers', function () {
-        var clicked = false;
-        var $iframe = $('<iframe></iframe>')
+    asyncTest('B237672 - TesCafe should not throw an exception "Access is denied" on accessing to a content of the cross-domain iframe', function () {
+        let result = false;
+
+        const $iframe = $('<iframe></iframe>')
             .width(500)
             .height(500)
             .attr('src', 'http://www.cross.domain.com')
-            .addClass(TEST_ELEMENT_CLASS)
-            .click(function () {
-                clicked = true;
-            });
+            .addClass(TEST_ELEMENT_CLASS);
 
         window.QUnitGlobals.waitForIframe($iframe[0]).then(function () {
             try {
-                //NOTE: for not ie
-                var iframeBody = $iframe[0].contentWindow.document;
+                const iframeDocument = $iframe[0].contentWindow.document;
 
-                nativeMethods.addEventListener.call(iframeBody, 'click', function () {
-                    clicked = true;
+                nativeMethods.addEventListener.call(iframeDocument, 'click', function () {
+                    throw new Error('Click handler on an iframe should not be called');
                 });
+
+                result = true;
             }
             catch (e) {
-                // do nothing
+                result = false;
             }
 
             runClickAutomation($iframe[0], {}, function () {
-                ok(clicked, 'click was raised');
+                ok(result);
                 startNext();
             });
         });
@@ -367,12 +372,12 @@ $(document).ready(function () {
     });
 
     asyncTest('B237862 - Test runner - the type action does not consider maxLength of the input element.', function () {
-        var initText     = 'init';
-        var newText      = 'newnewnew';
-        var $input       = createInput().attr('value', initText);
-        var input        = $input[0];
-        var resultString = initText + newText;
-        var maxLength    = 7;
+        const initText     = 'init';
+        const newText      = 'newnewnew';
+        const $input       = createInput().attr('value', initText);
+        const input        = $input[0];
+        const resultString = initText + newText;
+        const maxLength    = 7;
 
         $input.attr('maxLength', maxLength);
         equal(parseInt($input.attr('maxLength'), 10), 7);
@@ -391,10 +396,10 @@ $(document).ready(function () {
         //TODO: IE wrong detection dimension top for element if this element have height more than scrollable container
         //and element's top less than container top
         asyncTest('B237890 - Wrong scroll before second click on big element in scrollable container', function () {
-            var clickCount  = 0;
-            var errorScroll = false;
+            let clickCount  = 0;
+            let errorScroll = false;
 
-            var $scrollableContainer = $('<div />')
+            const $scrollableContainer = $('<div />')
                 .css({
                     position: 'absolute',
                     left:     '200px',
@@ -425,22 +430,22 @@ $(document).ready(function () {
                 })
                 .appendTo(body);
 
-            var scrollHandler = function () {
+            const scrollHandler = function () {
                 if (clickCount === 1)
                     errorScroll = true;
             };
 
-            var bindScrollHandlers = function () {
+            const bindScrollHandlers = function () {
                 $scrollableContainer.bind('scroll', scrollHandler);
                 $(window).bind('scroll', scrollHandler);
             };
 
-            var unbindScrollHandlers = function () {
+            const unbindScrollHandlers = function () {
                 $scrollableContainer.unbind('scroll', scrollHandler);
                 $(window).unbind('scroll', scrollHandler);
             };
 
-            var $element = $('<div></div>')
+            const $element = $('<div></div>')
                 .addClass(TEST_ELEMENT_CLASS)
                 .css({
                     width:           '150px',
@@ -475,9 +480,11 @@ $(document).ready(function () {
     }
 
     asyncTest('B237763 - ASPxPageControl - Lite render - Tabs are not clicked in Firefox', function () {
-        var clickRaised = false;
-        var $list       = $('<div></div>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var $b          = $('<b></b>').html('text').appendTo($list);
+        const $list       = $('<div></div>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+        const $b          = $('<b></b>').html('text').appendTo($list);
+
+        let clickRaised = false;
+
 
         $list[0].onclick = function () {
             clickRaised = true;
@@ -490,8 +497,8 @@ $(document).ready(function () {
     });
 
     asyncTest('Click on label with for attribute', function () {
-        var $input = $('<input type="checkbox"/>').addClass(TEST_ELEMENT_CLASS).attr('id', 'test123').appendTo('body');
-        var $label = $('<label>label</label>').addClass(TEST_ELEMENT_CLASS).attr('for', 'test123').appendTo('body');
+        const $input = $('<input type="checkbox"/>').addClass(TEST_ELEMENT_CLASS).attr('id', 'test123').appendTo('body');
+        const $label = $('<label>label</label>').addClass(TEST_ELEMENT_CLASS).attr('for', 'test123').appendTo('body');
 
         $input[0].checked = false;
 
@@ -502,14 +509,15 @@ $(document).ready(function () {
     });
 
     asyncTest('Q518957 - Test is inactive with mouse clicks and date-en-gb.js is included', function () {
-        var savedDateNow = window.Date;
+        const savedDateNow = window.Date;
 
         window.Date.now = function () {
             return {};
         };
 
-        var $input    = $('<input type="button" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var completed = false;
+        const $input = $('<input type="button" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+
+        let completed = false;
 
         runHoverAutomation($input[0], function () {
             if (!completed) {
@@ -531,8 +539,9 @@ $(document).ready(function () {
     });
 
     asyncTest('B238560 - Change event is not raised during TestCafe test running', function () {
-        var $input       = $('<input type="checkbox" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var changeRaised = false;
+        const $input = $('<input type="checkbox" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+
+        let changeRaised = false;
 
         $input[0].addEventListener('change', function () {
             changeRaised = true;
@@ -545,9 +554,10 @@ $(document).ready(function () {
     });
 
     asyncTest('B252929 - Wrong behavior during recording dblclick on input', function () {
-        var $input        = createInput();
-        var dblclickCount = 0;
-        var clickCount    = 0;
+        const $input = createInput();
+
+        let dblclickCount = 0;
+        let clickCount    = 0;
 
         $input[0].value = 'Test cafe';
 
@@ -571,8 +581,8 @@ $(document).ready(function () {
     });
 
     asyncTest('B253465 - Incorrect behavior when a math function is typed in ASPxSpreadsheet\'s cell', function () {
-        var ROUND_BRACKET_KEY_CODE  = 57;
-        var ROUND_BRACKET_CHAR_CODE = 40;
+        const ROUND_BRACKET_KEY_CODE  = 57;
+        const ROUND_BRACKET_CHAR_CODE = 40;
 
         function checkKeyCode (e) {
             equal(e.keyCode, ROUND_BRACKET_KEY_CODE);
@@ -582,22 +592,24 @@ $(document).ready(function () {
             equal(e.keyCode, ROUND_BRACKET_CHAR_CODE);
         }
 
-        var $input = createInput().keydown(checkKeyCode).keypress(checkCharCode).keyup(checkKeyCode);
+        const $input = createInput().keydown(checkKeyCode).keypress(checkCharCode).keyup(checkKeyCode);
 
         runTypeAutomation($input[0], '(', {})
             .then(function () {
                 startNext();
             });
 
-        expect(3);
+        const expectedAssertionCount = browserUtils.isAndroid ? 2 : 3;
+
+        expect(expectedAssertionCount);
     });
 
     asyncTest('B254340 - type in input with type="email"', function () {
-        var initText     = 'support@devexpress.com';
-        var newText      = 'new';
-        var $input       = createInput('email').attr('value', initText);
-        var caretPos     = 5;
-        var resultString = initText.substring(0, caretPos) + newText + initText.substring(caretPos);
+        const initText     = 'support@devexpress.com';
+        const newText      = 'new';
+        const $input       = createInput('email').attr('value', initText);
+        const caretPos     = 5;
+        const resultString = initText.substring(0, caretPos) + newText + initText.substring(caretPos);
 
         runTypeAutomation($input[0], newText, {
             caretPos: caretPos
@@ -610,16 +622,91 @@ $(document).ready(function () {
             });
     });
 
+    if (!browserUtils.isIOS && !browserUtils.isAndroid) {
+        asyncTest('GH-2325 - mouse events should have e.screenX and e.screenY properties', function () {
+            const promises   = [];
+            const screenLeft = window.screenLeft || window.screenX;
+            const screenTop  = window.screenTop || window.screenY;
+            const el         = document.createElement('div');
+            const mouseOutEl = document.createElement('div');
+
+            el.innerHTML         = 'Click me';
+            el.className         = TEST_ELEMENT_CLASS;
+            mouseOutEl.innerHTML = 'Hover me';
+            mouseOutEl.className = TEST_ELEMENT_CLASS;
+
+            document.body.appendChild(el);
+            document.body.appendChild(mouseOutEl);
+
+            const checkEventScreenXYOptions = function (eventName) {
+                let resolveFn;
+
+                promises.push(new Promise(function (resolve) {
+                    resolveFn = resolve;
+                }));
+
+                const handler = function (e) {
+                    ok(e.screenX > 0);
+                    ok(e.screenY > 0);
+                    equal(e.screenX, e.clientX + screenLeft);
+                    equal(e.screenY, e.clientY + screenTop);
+
+                    resolveFn();
+                    el.removeEventListener(eventName, handler);
+                };
+
+                return handler;
+            };
+
+            const addEventListener = function (eventName) {
+                el.addEventListener(eventName, checkEventScreenXYOptions(eventName));
+            };
+
+            addEventListener('mousemove');
+            addEventListener('mouseenter');
+            addEventListener('mouseover');
+            addEventListener('mousedown');
+            addEventListener('mouseup');
+            addEventListener('click');
+            addEventListener('mouseout');
+            addEventListener('mouseleave');
+            addEventListener('contextmenu');
+            addEventListener('dblclick');
+
+            const click    = new ClickAutomation(el, { offsetX: 5, offsetY: 5 });
+            const rClick   = new RClickAutomation(el, { offsetX: 5, offsetY: 5 });
+            const dblClick = new DblClickAutomation(el, { offsetX: 5, offsetY: 5 });
+            const mouseOut = new ClickAutomation(mouseOutEl, { offsetX: 5, offsetY: 5 });
+
+            click.run()
+                .then(function () {
+                    return mouseOut.run();
+                })
+                .then(function () {
+                    return rClick.run();
+                })
+                .then(function () {
+                    return dblClick.run();
+                })
+                .then(function () {
+                    Promise.all(promises).then(function () {
+                        startNext();
+                    });
+                });
+        });
+    }
+
     if (browserUtils.isIE) {
         //TODO: fix it for other browsers
         asyncTest('Unexpected focus events are raised during click', function () {
-            var input1FocusCount = 0;
-            var input2FocusCount = 0;
-            var $input1          = createInput().attr('id', '1').focus(function () {
+            let input1FocusCount = 0;
+            let input2FocusCount = 0;
+
+            const $input1 = createInput().attr('id', '1').focus(function () {
                 input1FocusCount++;
             });
 
-            var $input2 = createInput().attr('id', '2').focus(function () {
+            const $input2 = createInput().attr('id', '2').focus(function () {
                 input2FocusCount++;
                 $input1[0].focus();
             });
@@ -633,13 +720,14 @@ $(document).ready(function () {
         });
 
         asyncTest('Unexpected focus events are raised during dblclick', function () {
-            var input1FocusCount = 0;
-            var input2FocusCount = 0;
-            var $input1          = createInput().attr('id', '1').focus(function () {
+            let input1FocusCount = 0;
+            let input2FocusCount = 0;
+
+            const $input1 = createInput().attr('id', '1').focus(function () {
                 input1FocusCount++;
             });
 
-            var $input2 = createInput().attr('id', '2').focus(function () {
+            const $input2 = createInput().attr('id', '2').focus(function () {
                 input2FocusCount++;
                 $input1[0].focus();
             });
@@ -655,22 +743,23 @@ $(document).ready(function () {
 
     if (browserUtils.isIE && browserUtils.version > 9) {
         asyncTest('T109295 - User action act.click isn\'t raised by click on map', function () {
-            var initText = 'click';
-            var $input   = createInput('button').attr('value', initText).css({
+            const initText = 'click';
+            const $input   = createInput('button').attr('value', initText).css({
                 position: 'absolute',
                 left:     '200px',
                 top:      '200px'
             });
 
-            var log            = '';
-            var listenedEvents = {
+            let log = '';
+
+            const listenedEvents = {
                 mouse:    ['mouseover', 'mouseout', 'mousedown', 'mouseup', 'click'],
                 touch:    ['touchstart', 'touchend'],
                 pointer:  ['pointerover', 'pointerout', 'pointerdown', 'pointerup'],
                 MSevents: ['MSPointerOver', 'MSPointerOut', 'MSPointerDown', 'MSPointerUp']
             };
 
-            var addListeners = function (el, events) {
+            const addListeners = function (el, events) {
                 $.each(events, function (index, event) {
                     el.addEventListener(event, function (e) {
                         if (log !== '')
@@ -699,7 +788,7 @@ $(document).ready(function () {
     }
 
     asyncTest('T286582 - A menu item has a hover state in jssite tests, but it is not hovered', function () {
-        var style = [
+        const style = [
             '<style>',
             'input {border-bottom-width: 0;}',
             'input:hover {border-bottom-width: 10px;}',
@@ -708,18 +797,18 @@ $(document).ready(function () {
 
         // NOTE: we need to use a sandboxed jQuery to process the 'style' element content.
         // Since Hammerhead 8.0.0, proxying is performed on prototypes (instead of elements)
-        var sandboxedJQuery = window.sandboxedJQuery.jQuery;
+        const sandboxedJQuery = window.sandboxedJQuery.jQuery;
 
         sandboxedJQuery(style)
             .addClass(TEST_ELEMENT_CLASS)
             .appendTo(body);
 
-        var $input1 = createInput()
+        const $input1 = createInput()
             .css('position', 'fixed')
             .css('margin-top', '50px')
             .appendTo(body);
 
-        var $input2 = $input1
+        const $input2 = $input1
             .clone()
             .css('margin-left', '200px')
             .appendTo(body);
@@ -736,8 +825,8 @@ $(document).ready(function () {
     });
 
     asyncTest('B254020 - act.type in input type="number" does not type sometimes to input on motorolla Xoom pad.', function () {
-        var newText = '123';
-        var $input  = createInput()
+        const newText = '123';
+        const $input  = createInput()
             .attr('placeholder', 'Type here...')
             .css('-webkit-user-modify', 'read-write-plaintext-only');
 
@@ -754,9 +843,10 @@ $(document).ready(function () {
 
     if (!browserUtils.isIE9) {
         asyncTest('B254340 - click on input with type="number"', function () {
-            var $input     = createInput('number').val('123');
-            var caretPos   = 2;
-            var clickCount = 0;
+            const $input     = createInput('number').val('123');
+            const caretPos   = 2;
+
+            let clickCount = 0;
 
             $input.click(function () {
                 clickCount++;
@@ -774,20 +864,22 @@ $(document).ready(function () {
 
         if (!browserUtils.isFirefox) {
             asyncTest('B254340 - select in input with type="number"', function () {
-                var initText = '12345678987654321';
-                var input    = createInput('number').attr('value', initText).val(initText)[0];
-                var startPos = 5;
-                var endPos   = 11;
-                var backward = true;
+                const initText = '12345678987654321';
+                const input    = createInput('number').attr('value', initText).val(initText)[0];
+                const startPos = 5;
+                const endPos   = 11;
+                const backward = true;
 
-                var selectTextAutomation = new SelectTextAutomation(input, endPos, startPos, {});
+                const selectTextAutomation = new SelectTextAutomation(input, endPos, startPos, {});
 
                 selectTextAutomation
                     .run()
                     .then(function () {
                         equal(textSelection.getSelectionStart(input), startPos, 'start selection correct');
                         equal(textSelection.getSelectionEnd(input), endPos, 'end selection correct');
-                        equal(textSelection.hasInverseSelection(input), backward, 'selection direction correct');
+
+                        if (!window.DIRECTION_ALWAYS_IS_FORWARD)
+                            equal(textSelection.hasInverseSelection(input), backward, 'selection direction correct');
 
                         startNext();
                     });
@@ -795,10 +887,10 @@ $(document).ready(function () {
         }
 
         asyncTest('T133144 - Incorrect typing into an input with type "number" in FF during test executing (without caretPos)', function () {
-            var initText = '12345';
-            var text     = '123';
-            var newText  = initText + text;
-            var $input   = createInput('number').attr('value', initText);
+            const initText = '12345';
+            const text     = '123';
+            const newText  = initText + text;
+            const $input   = createInput('number').attr('value', initText);
 
             runTypeAutomation($input[0], text, {})
                 .then(function () {
@@ -811,10 +903,10 @@ $(document).ready(function () {
         });
 
         asyncTest('T133144 - Incorrect typing into an input with type "number" in FF during test executing (with caretPos)', function () {
-            var initText = '12345';
-            var text     = '123';
-            var $input   = createInput('number').attr('value', initText);
-            var caretPos = 2;
+            const initText = '12345';
+            const text     = '123';
+            const $input   = createInput('number').attr('value', initText);
+            const caretPos = 2;
 
             runTypeAutomation($input[0], text, {
                 caretPos: caretPos
@@ -831,9 +923,9 @@ $(document).ready(function () {
         });
 
         asyncTest('T133144 - Incorrect typing into an input with type "number" in FF during test executing (with replace)', function () {
-            var initText = '12345';
-            var text     = '678';
-            var $input   = createInput('number').attr('value', initText);
+            const initText = '12345';
+            const text     = '678';
+            const $input   = createInput('number').attr('value', initText);
 
             runTypeAutomation($input[0], text, {
                 replace: true
@@ -848,8 +940,9 @@ $(document).ready(function () {
         });
 
         asyncTest('T138385 - input type="number" leave out "maxlength" attribute (act.type)', function () {
-            var $input          = createInput('number').attr('maxLength', 2);
-            var inputEventCount = 0;
+            const $input          = createInput('number').attr('maxLength', 2);
+
+            let inputEventCount = 0;
 
             $input.bind('input', function () {
                 inputEventCount++;
@@ -865,10 +958,11 @@ $(document).ready(function () {
         });
 
         asyncTest('T138385 - input type "number" leave out "maxlength" attribute (act.press)', function () {
-            var $input          = createInput('number').attr('maxLength', 2);
-            var inputEventCount = 0;
-            var keySequence     = '1 2 3';
-            var pressAutomation = new PressAutomation(parseKeySequence(keySequence).combinations, {});
+            const $input          = createInput('number').attr('maxLength', 2);
+            const keySequence     = '1 2 3';
+            const pressAutomation = new PressAutomation(parseKeySequence(keySequence).combinations, {});
+
+            let inputEventCount = 0;
 
             $input.bind('input', function () {
                 inputEventCount++;
@@ -887,7 +981,7 @@ $(document).ready(function () {
         });
 
         asyncTest('B254340 - type letters in input with type="number" (symbol in start)', function () {
-            var input = createInput('number')[0];
+            const input = createInput('number')[0];
 
             runTypeAutomation(input, '+12', {})
                 .then(function () {
@@ -928,7 +1022,7 @@ $(document).ready(function () {
         });
 
         asyncTest('B254340 - type letters in input with type="number" (symbol in the middle)', function () {
-            var input = createInput('number')[0];
+            const input = createInput('number')[0];
 
             runTypeAutomation(input, '1+2', {})
                 .then(function () {
@@ -969,7 +1063,7 @@ $(document).ready(function () {
         });
 
         asyncTest('B254340 - type letters in input with type="number" (symbol in the end)', function () {
-            var input = createInput('number')[0];
+            const input = createInput('number')[0];
 
             runTypeAutomation(input, '12+', {})
                 .then(function () {
@@ -1011,7 +1105,7 @@ $(document).ready(function () {
         });
 
         asyncTest('B254340 - type letters in input with type="number" (one symbol)', function () {
-            var input = createInput('number').val('12')[0];
+            const input = createInput('number').val('12')[0];
 
             runTypeAutomation(input, '+', { caretPos: 0 })
                 .then(function () {
@@ -1052,4 +1146,65 @@ $(document).ready(function () {
                 });
         });
     }
+
+    test('Scrolling works wrong in specific scenario in IE (gh-2002)', function () {
+        const mockParentDimension = {
+            top:    0,
+            bottom: 782,
+            height: 782,
+            left:   0,
+            right:  1423,
+            width:  1423,
+
+            border: {
+                top:    0,
+                right:  0,
+                bottom: 0,
+                left:   0
+            },
+
+            scroll: {
+                left: 0,
+                top:  255
+            },
+
+            scrollbar: {
+                bottom: 0,
+                right:  0
+            }
+        };
+
+        const mockChildDimension = {
+            top:    3.91999983787566,
+            bottom: 777.91999983787566,
+            height: 774,
+            left:   571.5,
+            right:  991.5,
+            width:  420,
+
+            border: {
+                top:    2,
+                right:  2,
+                bottom: 2,
+                left:   2
+            },
+
+            scroll: {
+                left: 0,
+                top:  0
+            },
+
+            scrollbar: {
+                bottom: 0,
+                right:  0
+            }
+        };
+
+        deepEqual(positionUtils.calcRelativePosition(mockChildDimension, mockParentDimension), {
+            top:    4,
+            right:  431,
+            bottom: 4,
+            left:   572
+        });
+    });
 });

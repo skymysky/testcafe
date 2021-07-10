@@ -1,19 +1,10 @@
-var expect         = require('chai').expect;
-var parseUserAgent = require('useragent').parse;
-var config         = require('../../../../config');
+const expect             = require('chai').expect;
+const config             = require('../../../../config');
+const { checkUserAgent } = require('../../../../assertion-helper');
 
 describe('[API] ClientFunction', function () {
     it('Should be correctly dispatched to test run', function () {
-        function assertUA (errs, alias, expected) {
-            if (!errs[alias])
-                throw new Error('Error for "' + alias + '" haven\'t created');
-
-            var ua = parseUserAgent(errs[alias][0]).toString().toLowerCase();
-
-            expect(ua.indexOf(expected)).eql(0, ua + ' doesn\'t start with "' + expected + '"');
-        }
-
-        var browsers = 'chrome,firefox,ie';
+        const browsers = 'chrome,firefox,ie';
 
         return runTests('./testcafe-fixtures/client-fn-test.js', 'Dispatch', { shouldFail: true, only: browsers })
             .catch(function (errs) {
@@ -22,7 +13,7 @@ describe('[API] ClientFunction', function () {
                         return browsers.indexOf(browser.alias) > -1;
                     })
                     .forEach(function (browser) {
-                        assertUA(errs, browser.alias, browser.alias);
+                        checkUserAgent(errs, browser.alias);
                     });
             });
     });
@@ -45,6 +36,10 @@ describe('[API] ClientFunction', function () {
 
     it('Should polyfill Babel artifacts', function () {
         return runTests('./testcafe-fixtures/client-fn-test.js', 'Babel artifacts polyfills');
+    });
+
+    it('Should correctly compile for-of loops', () => {
+        return runTests('./testcafe-fixtures/client-fn-test.js', 'For-of loops');
     });
 
     it('Should execute ClientFunction with dependencies', function () {
@@ -92,7 +87,7 @@ describe('[API] ClientFunction', function () {
                 only:       'chrome'
             }).catch(function (errs) {
                 expect(errs[0].indexOf(
-                    'ClientFunction code is expected to be specified as a function, but number was passed.'
+                    'Cannot initialize a ClientFunction because ClientFunction is number, and not a function.'
                 )).eql(0);
 
                 expect(errs[0]).contains('> 32 |    await ClientFunction(123)();');
@@ -144,7 +139,7 @@ describe('[API] ClientFunction', function () {
                 only:       'chrome'
             }).catch(function (errs) {
                 expect(errs[0].indexOf(
-                    'The "boundTestRun" option value is expected to be a test controller.'
+                    'Cannot resolve the "boundTestRun" option because its value is not a test controller.'
                 )).eql(0);
 
                 expect(errs[0]).contains('> 94 |    ClientFunction(() => 123).with({ boundTestRun: {} });');

@@ -1,60 +1,42 @@
-import loadBabelLibs from '../../../load-babel-libs';
+import loadBabelLibs from '../../../babel/load-libs';
 import APIBasedTestFileCompilerBase from '../../api-based';
-
-const BABEL_RUNTIME_RE = /^babel-runtime(\\|\/|$)/;
-const FLOW_MARKER_RE   = /^\s*\/\/\s*@flow\s*\n|^\s*\/\*\s*@flow\s*\*\//;
+import isFlowCode from './is-flow-code';
+import BASE_BABEL_OPTIONS from '../../../babel/get-base-babel-options';
 
 export default class ESNextTestFileCompiler extends APIBasedTestFileCompilerBase {
     static getBabelOptions (filename, code) {
-        var { presetStage2, presetFlow, transformRuntime, transformClassProperties, presetEnv } = loadBabelLibs();
+        const {
+            presetStage2,
+            presetFlow,
+            transformRuntime,
+            presetEnvForTestCode,
+            presetReact,
+            moduleResolver,
+            proposalPrivateMethods,
+            proposalClassProperties
+        } = loadBabelLibs();
 
-        // NOTE: passPrePreset and complex presets is a workaround for https://github.com/babel/babel/issues/2877
-        // Fixes https://github.com/DevExpress/testcafe/issues/969
-        return {
-            passPerPreset: true,
-            presets:       [
-                {
-                    passPerPreset: false,
-                    presets:       [{ plugins: [transformRuntime] }, presetStage2, presetEnv]
-                },
-                FLOW_MARKER_RE.test(code) ? {
-                    passPerPreset: false,
-                    presets:       [{ plugins: [transformClassProperties] }, presetFlow]
-                } : {}
-            ],
-            filename:      filename,
-            retainLines:   true,
-            sourceMaps:    'inline',
-            ast:           false,
-            babelrc:       false,
-            highlightCode: false,
+        const opts = Object.assign({}, BASE_BABEL_OPTIONS, {
+            presets:    [presetStage2, presetEnvForTestCode, presetReact],
+            plugins:    [transformRuntime, moduleResolver, proposalPrivateMethods, proposalClassProperties],
+            sourceMaps: 'inline',
+            filename
+        });
 
-            resolveModuleSource: source => {
-                if (source === 'testcafe')
-                    return APIBasedTestFileCompilerBase.EXPORTABLE_LIB_PATH;
+        if (isFlowCode(code))
+            opts.presets.push(presetFlow);
 
-                if (BABEL_RUNTIME_RE.test(source)) {
-                    try {
-                        return require.resolve(source);
-                    }
-                    catch (err) {
-                        return source;
-                    }
-                }
-
-                return source;
-            }
-        };
+        return opts;
     }
 
     _compileCode (code, filename) {
-        var { babel } = loadBabelLibs();
+        const { babel } = loadBabelLibs();
 
         if (this.cache[filename])
             return this.cache[filename];
 
-        var opts     = ESNextTestFileCompiler.getBabelOptions(filename, code);
-        var compiled = babel.transform(code, opts);
+        const opts     = ESNextTestFileCompiler.getBabelOptions(filename, code);
+        const compiled = babel.transform(code, opts);
 
         this.cache[filename] = compiled.code;
 
@@ -62,10 +44,13 @@ export default class ESNextTestFileCompiler extends APIBasedTestFileCompilerBase
     }
 
     _getRequireCompilers () {
-        return { '.js': (code, filename) => this._compileCode(code, filename) };
+        return {
+            '.js':  (code, filename) => this._compileCode(code, filename),
+            '.jsx': (code, filename) => this._compileCode(code, filename),
+        };
     }
 
     getSupportedExtension () {
-        return '.js';
+        return ['.js', '.jsx'];
     }
 }

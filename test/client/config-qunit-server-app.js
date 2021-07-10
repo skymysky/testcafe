@@ -1,21 +1,23 @@
-var url  = require('url');
-var fs   = require('fs');
-var path = require('path');
+const url  = require('url');
+const fs   = require('fs');
+const path = require('path');
+
+const createShadowStylesheet = require('testcafe-hammerhead/lib/shadow-ui/create-shadow-stylesheet');
 
 
 //The following code is copied from testcafe-hammerhead
 //NOTE: Url rewrite proxied requests (e.g. for iframes), so they will hit our server
 function urlRewriteProxyRequest (req, res, next) {
-    var proxiedUrlPartRegExp = /^\/\S+?\/(https?:)/;
+    const proxiedUrlPartRegExp = /^\/\S+?\/(https?:)/;
 
     if (proxiedUrlPartRegExp.test(req.url)) {
         // NOTE: store original URL so we can sent it back for testing purposes (see GET xhr-test route).
         req.originalUrl = req.url;
 
-        var reqUrl = req.url.replace(proxiedUrlPartRegExp, '$1');
+        const reqUrl = req.url.replace(proxiedUrlPartRegExp, '$1');
 
         //NOTE: create host-relative URL
-        var parsedUrl = url.parse(reqUrl);
+        const parsedUrl = url.parse(reqUrl);
 
         parsedUrl.host     = null;
         parsedUrl.hostname = null;
@@ -37,16 +39,22 @@ module.exports = function (app) {
     app.use(urlRewriteProxyRequest);
 
     app.get('/wrap-responseText-test/:isJSON', function (req, res) {
-        var isJSON       = req.params.isJSON === 'json';
-        var responseText = isJSON ?
-                           '{tag: "a", location: "location", attribute: {src: "example.com"}}' :
-                           '<a href="example.com"><img src="img.png"></a>';
+        const isJSON       = req.params.isJSON === 'json';
+        const responseText = isJSON ?
+            '{tag: "a", location: "location", attribute: {src: "example.com"}}' :
+            '<a href="example.com"><img src="img.png"></a>';
 
         res.send(responseText);
     });
 
+    app.get('/transport-worker.js', function (req, res) {
+        res
+            .set('content-type', 'application/javascript')
+            .send(fs.readFileSync(path.join(__dirname, '../../node_modules/testcafe-hammerhead/lib/client/transport-worker.js')));
+    });
+
     app.all('/xhr-test/:delay', function (req, res) {
-        var delay = req.params.delay || 0;
+        const delay = req.params.delay || 0;
 
         preventCaching(res);
 
@@ -62,8 +70,14 @@ module.exports = function (app) {
         });
     });
 
-    app.get('/respond-500', function (req, res) {
-        res.statusCode = 500;
-        res.send('Server error');
+    app.get('/close-request', function (req) {
+        req.destroy();
+    });
+
+    app.all('/styles.css', function (req, res) {
+        fs.readFile(path.join(__dirname, '../../lib/client/ui/styles.css'), function (err, css) {
+            res.set('Content-Type', 'text/css');
+            res.send(createShadowStylesheet(css.toString()));
+        });
     });
 };

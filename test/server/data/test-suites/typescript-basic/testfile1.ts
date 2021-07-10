@@ -15,11 +15,37 @@ test(test2Name, async() => {
     return 'F1T2';
 });
 
-fixture(`Fixture${1 + 1}`)
-    .page('http://example.org')
+fixture`Fixture${1 + 1}`
+    .page`http://${'example'}.org`
     .beforeEach(async () => 'yo')
     .afterEach(async () => 'yo');
 
 test('Fixture2Test1', async() => {
     return 'F2T1';
 });
+
+// Decorators
+function foo () {
+    return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+        Object.assign({}, { msg: `target is ${target}` });
+    };
+}
+
+function sealed(constructor: Function) {
+    Object.seal(constructor);
+    Object.seal(constructor.prototype);
+}
+
+@sealed
+class Greeter {
+    greeting: string;
+
+    constructor(message: string) {
+        this.greeting = message;
+    }
+
+    @foo()
+    greet() {
+        return "Hello, " + this.greeting;
+    }
+}

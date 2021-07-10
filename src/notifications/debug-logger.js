@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { findIndex } from 'lodash';
 import logUpdate from 'log-update-async-hook';
+import renderCallsiteSync from '../utils/render-callsite-sync';
 import createStackFilter from '../errors/create-stack-filter';
 
 export default {
@@ -11,7 +12,7 @@ export default {
     streamsOverridden: false,
 
     _overrideStream (stream) {
-        var initialWrite = stream.write;
+        const initialWrite = stream.write;
 
         stream.write = (chunk, encoding, cb) => {
             if (this.debugLogging)
@@ -39,9 +40,9 @@ export default {
     },
 
     _getMessageAsString () {
-        var string = '';
+        let string = '';
 
-        for (var message of this.messages)
+        for (const message of this.messages)
             string += message.frame;
 
         return string;
@@ -60,23 +61,23 @@ export default {
         if (!this.streamsOverridden)
             this._overrideStreams();
 
-        // NOTE: We do not have callsite for the raw API at the moment. Remove this check after
-        // the callsite format for the raw API will be implemented.
-        var callsiteStr = callsite ? callsite.renderSync({
+        const callsiteStr = renderCallsiteSync(callsite, {
             frameSize:   1,
             stackFilter: createStackFilter(Error.stackTraceLimit),
             stack:       false
-        }) : '';
+        });
 
-        var frame = `\n` +
-                    `----\n` +
-                    `${userAgent}\n` +
-                    chalk.yellow(testError ? 'DEBUGGER PAUSE ON FAILED TEST:' : 'DEBUGGER PAUSE:') + `\n` +
-                    `${testError ? testError : callsiteStr}\n` +
-                    `----\n`;
+        const frame = `\n` +
+                      `----\n` +
+                      `${userAgent}\n` +
+                      chalk.yellow(testError ? 'DEBUGGER PAUSE ON FAILED TEST:' : 'DEBUGGER PAUSE:') +
+                      `${testError ? `\n${testError}` : ''}` +
+                      `${!testError && callsiteStr ? `\n${callsiteStr}` : ''}` +
+                      '\n' +
+                      `----\n`;
 
-        var message = { testRunId, frame };
-        var index   = findIndex(this.messages, { testRunId });
+        const message = { testRunId, frame };
+        const index   = findIndex(this.messages, { testRunId });
 
         if (index === -1)
             this.messages.push(message);
@@ -87,7 +88,7 @@ export default {
     },
 
     hideBreakpoint (testRunId) {
-        var index = findIndex(this.messages, { testRunId });
+        const index = findIndex(this.messages, { testRunId });
 
         if (index !== -1)
             this.messages.splice(index, 1);

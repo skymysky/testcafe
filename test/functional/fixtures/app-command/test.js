@@ -1,6 +1,6 @@
-var expect     = require('chai').expect;
-var isFreePort = require('endpoint-utils').isFreePort;
-var delay      = require('../../../../lib/utils/delay');
+const expect     = require('chai').expect;
+const isFreePort = require('endpoint-utils').isFreePort;
+const delay      = require('../../../../lib/utils/delay');
 
 describe('App command', function () {
     it('Should fail task if app fails', function () {
@@ -9,13 +9,13 @@ describe('App command', function () {
             appCommand: 'node test/functional/fixtures/app-command/failing-app.js'
         })
             .catch(function (err) {
-                expect(err.message).contains('Tested app failed with an error:\n\nError: Command failed');
+                expect(err.message).contains('The web application failed with the following error:\n\nError: Command failed');
             });
     });
 
     it('Should run app and close it once the tests complete', function () {
         return runTests('./testcafe-fixtures/app-command-test.js', 'Click div', {
-            appCommand: 'http-server test/functional/fixtures/app-command/static -p 3026'
+            appCommand: 'node test/functional/fixtures/app-command/normal-app.js'
         })
             .then(function () {
                 return delay(1000);

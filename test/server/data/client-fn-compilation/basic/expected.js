@@ -1,8 +1,9 @@
 (function () {
-    return (function () {
+    var func = function func () {
         var _window$location = __get$(window, "location"),
-            hostname         = __get$(_window$location, "hostname"),
-            port             = __get$(_window$location, "port");
+            hostname         = _window$location.hostname,
+            port             = _window$location.port;
         return hostname + ':' + port;
-    });
+    };
+    return func;
 })();

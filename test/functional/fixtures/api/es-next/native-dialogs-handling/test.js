@@ -1,11 +1,11 @@
-var errorInEachBrowserContains                = require('../../../../assertion-helper.js').errorInEachBrowserContains;
-var getNativeDialogNotHandledErrorText        = require('./errors.js').getNativeDialogNotHandledErrorText;
-var getUncaughtErrorInNativeDialogHandlerText = require('./errors.js').getUncaughtErrorInNativeDialogHandlerText;
+const errorInEachBrowserContains                = require('../../../../assertion-helper.js').errorInEachBrowserContains;
+const getNativeDialogNotHandledErrorText        = require('./errors.js').getNativeDialogNotHandledErrorText;
+const getUncaughtErrorInNativeDialogHandlerText = require('./errors.js').getUncaughtErrorInNativeDialogHandlerText;
 
 
-var pageUrl        = 'http://localhost:3000/fixtures/api/es-next/native-dialogs-handling/pages/index.html';
-var pageLoadingUrl = 'http://localhost:3000/fixtures/api/es-next/native-dialogs-handling/pages/page-load.html';
-var pagePromptUrl  = 'http://localhost:3000/fixtures/api/es-next/native-dialogs-handling/pages/prompt.html';
+const pageUrl        = 'http://localhost:3000/fixtures/api/es-next/native-dialogs-handling/pages/index.html';
+const pageLoadingUrl = 'http://localhost:3000/fixtures/api/es-next/native-dialogs-handling/pages/page-load.html';
+const pagePromptUrl  = 'http://localhost:3000/fixtures/api/es-next/native-dialogs-handling/pages/prompt.html';
 
 
 describe('Native dialogs handling', function () {
@@ -63,7 +63,7 @@ describe('Native dialogs handling', function () {
         it('Should pass if the expected beforeUnload dialog appears after an action', function () {
             return runTests('./testcafe-fixtures/native-dialogs-test.js', 'Expected beforeUnload after an action', {
                 // https://github.com/DevExpress/testcafe-hammerhead/issues/698
-                skip: 'safari'
+                skip: 'safari,iphone,ipad'
             });
         });
     });
@@ -78,7 +78,7 @@ describe('Native dialogs handling', function () {
                 { shouldFail: true })
                 .catch(function (errs) {
                     errorInEachBrowserContains(errs, getNativeDialogNotHandledErrorText('alert', pageLoadingUrl), 0);
-                    errorInEachBrowserContains(errs, '> 40 |    await t.click(\'body\');', 0);
+                    errorInEachBrowserContains(errs, '> 42 |        await t.click(\'body\');', 0);
                 });
         });
     });
@@ -132,7 +132,7 @@ describe('Native dialogs handling', function () {
         it('Should fail if client function argument has wrong type', function () {
             return runTests('./testcafe-fixtures/native-dialogs-test.js', 'Client function argument wrong type', { shouldFail: true })
                 .catch(function (errs) {
-                    errorInEachBrowserContains(errs, 'ClientFunction code is expected to be specified as a function, but number was passed.', 0);
+                    errorInEachBrowserContains(errs, 'Cannot initialize a ClientFunction because ClientFunction is number, and not a function.', 0);
                     errorInEachBrowserContains(errs, ' > 178 |    await t.setNativeDialogHandler(ClientFunction(42));', 0);
                 });
         });

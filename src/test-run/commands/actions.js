@@ -2,99 +2,119 @@ import TYPE from './type';
 import SelectorBuilder from '../../client-functions/selectors/selector-builder';
 import ClientFunctionBuilder from '../../client-functions/client-function-builder';
 import functionBuilderSymbol from '../../client-functions/builder-symbol';
-import Assignable from '../../utils/assignable';
-import { ActionOptions, ClickOptions, MouseOptions, TypeOptions, DragToElementOptions } from './options';
+import CommandBase from './base';
+import {
+    ActionOptions,
+    ClickOptions,
+    MouseOptions,
+    TypeOptions,
+    PressOptions,
+    DragToElementOptions,
+    OffsetOptions
+} from './options';
+
+import { initSelector, initUploadSelector } from './validations/initializers';
+import { executeJsExpression } from '../execute-js-expression';
+import { isJSExpression } from './utils';
 
 import {
     actionOptions,
     integerArgument,
     positiveIntegerArgument,
+    stringArgument,
     nonEmptyStringArgument,
+    nullableStringArgument,
     urlArgument,
     stringOrStringArrayArgument,
     setSpeedArgument,
-    actionRoleArgument
+    actionRoleArgument,
+    booleanArgument,
+    functionArgument
 } from './validations/argument';
 
-import { ActionSelectorError, SetNativeDialogHandlerCodeWrongTypeError } from '../../errors/test-run';
-import { APIError } from '../../errors/runtime';
-import { ExecuteClientFunctionCommand, ExecuteSelectorCommand } from './observation';
-import { executeJsExpression } from '../execute-js-expression';
-import { isJSExpression } from './utils';
+import { SetNativeDialogHandlerCodeWrongTypeError } from '../../errors/test-run';
+import { ExecuteClientFunctionCommand } from './observation';
+
 
 // Initializers
-function initSelector (name, val, skipVisibilityCheck) {
-    if (val instanceof ExecuteSelectorCommand)
-        return val;
-
-    try {
-        if (isJSExpression(val))
-            val = executeJsExpression(val.value, skipVisibilityCheck);
-
-        var builder = new SelectorBuilder(val, { visibilityCheck: !skipVisibilityCheck }, { instantiation: 'Selector' });
-
-        return builder.getCommand([]);
-    }
-    catch (err) {
-        var msg = err.constructor === APIError ? err.rawMessage : err.message;
-
-        throw new ActionSelectorError(name, msg);
-    }
+function initActionOptions (name, val, initOptions, validate = true) {
+    return new ActionOptions(val, validate);
 }
 
-function initActionOptions (name, val) {
-    return new ActionOptions(val, true);
+function initClickOptions (name, val, initOptions, validate = true) {
+    return new ClickOptions(val, validate);
 }
 
-function initClickOptions (name, val) {
-    return new ClickOptions(val, true);
+function initMouseOptions (name, val, initOptions, validate = true) {
+    return new MouseOptions(val, validate);
 }
 
-function initMouseOptions (name, val) {
-    return new MouseOptions(val, true);
+function initOffsetOptions (name, val, initOptions, validate = true) {
+    return new OffsetOptions(val, validate);
 }
 
-function initTypeOptions (name, val) {
-    return new TypeOptions(val, true);
+function initTypeOptions (name, val, initOptions, validate = true) {
+    return new TypeOptions(val, validate);
 }
 
-function initDragToElementOptions (name, val) {
-    return new DragToElementOptions(val, true);
+function initDragToElementOptions (name, val, initOptions, validate = true) {
+    return new DragToElementOptions(val, validate);
 }
 
-function initDialogHandler (name, val) {
-    var fn = val.fn;
+function initPressOptions (name, val, initOptions, validate = true) {
+    return new PressOptions(val, validate);
+}
+
+function initDialogHandler (name, val, { skipVisibilityCheck, testRun }) {
+    let fn;
+
+    if (isJSExpression(val))
+        fn = executeJsExpression(val.value, testRun, { skipVisibilityCheck });
+    else
+        fn = val.fn;
 
     if (fn === null || fn instanceof ExecuteClientFunctionCommand)
         return fn;
 
-    var options      = val.options;
-    var methodName   = 'setNativeDialogHandler';
-    var builder      = fn && fn[functionBuilderSymbol];
-    var isSelector   = builder instanceof SelectorBuilder;
-    var functionType = typeof fn;
+    const options      = val.options;
+    const methodName   = 'setNativeDialogHandler';
+    const functionType = typeof fn;
+
+    let builder = fn && fn[functionBuilderSymbol];
+
+    const isSelector       = builder instanceof SelectorBuilder;
+    const isClientFunction = builder instanceof ClientFunctionBuilder;
 
     if (functionType !== 'function' || isSelector)
         throw new SetNativeDialogHandlerCodeWrongTypeError(isSelector ? 'Selector' : functionType);
 
-    builder = builder instanceof ClientFunctionBuilder ?
-              fn.with(options)[functionBuilderSymbol] :
-              new ClientFunctionBuilder(fn, options, { instantiation: methodName, execution: methodName });
+    if (isClientFunction)
+        builder = fn.with(options)[functionBuilderSymbol];
+    else
+        builder = new ClientFunctionBuilder(fn, options, { instantiation: methodName, execution: methodName });
 
     return builder.getCommand([]);
-
 }
 
 // Commands
-export class ClickCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
+export class DispatchEventCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.dispatchEvent, validateProperties);
+    }
 
-        this.type     = TYPE.click;
-        this.selector = null;
-        this.options  = null;
+    _getAssignableProperties () {
+        return [
+            { name: 'selector', init: initSelector, required: true },
+            { name: 'eventName', type: nonEmptyStringArgument, required: true },
+            { name: 'options', type: actionOptions },
+            { name: 'relatedTarget', init: initSelector, required: false }
+        ];
+    }
+}
 
-        this._assignFrom(obj, true);
+export class ClickCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.click, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -105,15 +125,9 @@ export class ClickCommand extends Assignable {
     }
 }
 
-export class RightClickCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type     = TYPE.rightClick;
-        this.selector = null;
-        this.options  = null;
-
-        this._assignFrom(obj, true);
+export class RightClickCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.rightClick, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -124,15 +138,34 @@ export class RightClickCommand extends Assignable {
     }
 }
 
-export class DoubleClickCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
+export class ExecuteExpressionCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.executeExpression, validateProperties);
+    }
 
-        this.type     = TYPE.doubleClick;
-        this.selector = null;
-        this.options  = null;
+    _getAssignableProperties () {
+        return [
+            { name: 'expression', type: nonEmptyStringArgument, required: true },
+            { name: 'resultVariableName', type: nonEmptyStringArgument, defaultValue: null }
+        ];
+    }
+}
 
-        this._assignFrom(obj, true);
+export class ExecuteAsyncExpressionCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.executeAsyncExpression, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+            { name: 'expression', type: stringArgument, required: true }
+        ];
+    }
+}
+
+export class DoubleClickCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.doubleClick, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -143,15 +176,9 @@ export class DoubleClickCommand extends Assignable {
     }
 }
 
-export class HoverCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type     = TYPE.hover;
-        this.selector = null;
-        this.options  = null;
-
-        this._assignFrom(obj, true);
+export class HoverCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.hover, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -162,16 +189,9 @@ export class HoverCommand extends Assignable {
     }
 }
 
-export class TypeTextCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type     = TYPE.typeText;
-        this.selector = null;
-        this.text     = null;
-        this.options  = null;
-
-        this._assignFrom(obj, true);
+export class TypeTextCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.typeText, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -183,17 +203,9 @@ export class TypeTextCommand extends Assignable {
     }
 }
 
-export class DragCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type        = TYPE.drag;
-        this.selector    = null;
-        this.dragOffsetX = null;
-        this.dragOffsetY = null;
-        this.options     = null;
-
-        this._assignFrom(obj, true);
+export class DragCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.drag, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -206,17 +218,9 @@ export class DragCommand extends Assignable {
     }
 }
 
-export class DragToElementCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type = TYPE.dragToElement;
-
-        this.selector            = null;
-        this.destinationSelector = null;
-        this.options             = null;
-
-        this._assignFrom(obj, true);
+export class DragToElementCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.dragToElement, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -228,158 +232,151 @@ export class DragToElementCommand extends Assignable {
     }
 }
 
-export class SelectTextCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
+export class ScrollCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.scroll, validateProperties);
+    }
 
-        this.type     = TYPE.selectText;
-        this.selector = null;
-        this.startPos = null;
-        this.endPos   = null;
-        this.options  = null;
+    _getAssignableProperties () {
+        return [
+            { name: 'selector', init: initSelector, required: false },
+            { name: 'position', type: nullableStringArgument, required: false },
+            { name: 'x', type: positiveIntegerArgument, defaultValue: null },
+            { name: 'y', type: positiveIntegerArgument, defaultValue: null },
+            { name: 'options', type: actionOptions, init: initOffsetOptions, required: true }
+        ];
+    }
+}
 
-        this._assignFrom(obj, true);
+export class ScrollByCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.scrollBy, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+            { name: 'selector', init: initSelector, required: false },
+            { name: 'byX', type: integerArgument, defaultValue: 0 },
+            { name: 'byY', type: integerArgument, defaultValue: 0 },
+            { name: 'options', type: actionOptions, init: initOffsetOptions, required: true }
+        ];
+    }
+}
+
+export class ScrollIntoViewCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.scrollIntoView, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
             { name: 'selector', init: initSelector, required: true },
-            { name: 'startPos', type: positiveIntegerArgument },
-            { name: 'endPos', type: positiveIntegerArgument },
+            { name: 'options', type: actionOptions, init: initOffsetOptions, required: true },
+        ];
+    }
+}
+
+export class SelectTextCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.selectText, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+            { name: 'selector', init: initSelector, required: true },
+            { name: 'startPos', type: positiveIntegerArgument, defaultValue: null },
+            { name: 'endPos', type: positiveIntegerArgument, defaultValue: null },
             { name: 'options', type: actionOptions, init: initActionOptions, required: true }
         ];
     }
 }
 
-export class SelectEditableContentCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type          = TYPE.selectEditableContent;
-        this.startSelector = null;
-        this.endSelector   = null;
-        this.options       = null;
-
-        this._assignFrom(obj, true);
+export class SelectEditableContentCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.selectEditableContent, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
             { name: 'startSelector', init: initSelector, required: true },
-            { name: 'endSelector', init: initSelector },
+            { name: 'endSelector', init: initSelector, defaultValue: null },
             { name: 'options', type: actionOptions, init: initActionOptions, required: true }
         ];
     }
 }
 
-export class SelectTextAreaContentCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type      = TYPE.selectTextAreaContent;
-        this.selector  = null;
-        this.startLine = null;
-        this.startPos  = null;
-        this.endLine   = null;
-        this.endPos    = null;
-        this.options   = null;
-
-        this._assignFrom(obj, true);
+export class SelectTextAreaContentCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.selectTextAreaContent, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
             { name: 'selector', init: initSelector, required: true },
-            { name: 'startLine', type: positiveIntegerArgument },
-            { name: 'startPos', type: positiveIntegerArgument },
-            { name: 'endLine', type: positiveIntegerArgument },
-            { name: 'endPos', type: positiveIntegerArgument },
+            { name: 'startLine', type: positiveIntegerArgument, defaultValue: null },
+            { name: 'startPos', type: positiveIntegerArgument, defaultValue: null },
+            { name: 'endLine', type: positiveIntegerArgument, defaultValue: null },
+            { name: 'endPos', type: positiveIntegerArgument, defaultValue: null },
             { name: 'options', type: actionOptions, init: initActionOptions, required: true }
         ];
     }
 }
 
-export class PressKeyCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type    = TYPE.pressKey;
-        this.keys    = '';
-        this.options = null;
-
-        this._assignFrom(obj, true);
+export class PressKeyCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.pressKey, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
             { name: 'keys', type: nonEmptyStringArgument, required: true },
-            { name: 'options', type: actionOptions, init: initActionOptions, required: true }
+            { name: 'options', type: actionOptions, init: initPressOptions, required: true }
         ];
     }
 }
 
-export class NavigateToCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type = TYPE.navigateTo;
-        this.url  = null;
-
-        this._assignFrom(obj, true);
+export class NavigateToCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.navigateTo, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
-            { name: 'url', type: urlArgument, required: true }
+            { name: 'url', type: urlArgument, required: true },
+            { name: 'stateSnapshot', type: nullableStringArgument, defaultValue: null },
+            { name: 'forceReload', type: booleanArgument, defaultValue: false }
         ];
     }
 }
 
-export class SetFilesToUploadCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type = TYPE.setFilesToUpload;
-
-        this.selector = null;
-        this.filePath = '';
-
-        this._assignFrom(obj, true);
+export class SetFilesToUploadCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.setFilesToUpload, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
-            { name: 'selector', init: (name, val) => initSelector(name, val, true), required: true },
+            { name: 'selector', init: initUploadSelector, required: true },
             { name: 'filePath', type: stringOrStringArrayArgument, required: true }
         ];
     }
 }
 
-export class ClearUploadCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type = TYPE.clearUpload;
-
-        this.selector = null;
-
-        this._assignFrom(obj, true);
+export class ClearUploadCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.clearUpload, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
-            { name: 'selector', init: (name, val) => initSelector(name, val, true), required: true }
+            { name: 'selector', init: initUploadSelector, required: true }
         ];
     }
 }
 
-export class SwitchToIframeCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type     = TYPE.switchToIframe;
-        this.selector = null;
-        this._assignFrom(obj, true);
+export class SwitchToIframeCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.switchToIframe, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -395,20 +392,120 @@ export class SwitchToMainWindowCommand {
     }
 }
 
-export class SetNativeDialogHandlerCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
+export class OpenWindowCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.openWindow, validateProperties);
+    }
 
-        this.type          = TYPE.setNativeDialogHandler;
-        this.dialogHandler = {};
+    _getAssignableProperties () {
+        return [
+            { name: 'url', type: urlArgument },
+        ];
+    }
+}
 
-        this._assignFrom(obj, true);
+export class CloseWindowCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.closeWindow, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+            { name: 'windowId', type: nullableStringArgument, required: true },
+        ];
+    }
+}
+
+
+export class GetCurrentWindowCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.getCurrentWindow, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+        ];
+    }
+}
+
+export class GetCurrentWindowsCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.getCurrentWindows, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+        ];
+    }
+}
+
+
+export class SwitchToWindowCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.switchToWindow, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+            { name: 'windowId', type: nonEmptyStringArgument, required: true }
+        ];
+    }
+}
+
+export class SwitchToWindowByPredicateCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.switchToWindowByPredicate, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+            { name: 'findWindow', type: functionArgument, required: true }
+        ];
+    }
+}
+
+export class SwitchToParentWindowCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.switchToParentWindow, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [
+        ];
+    }
+}
+
+export class SwitchToPreviousWindowCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.switchToPreviousWindow, validateProperties);
+    }
+
+    _getAssignableProperties () {
+        return [];
+    }
+}
+
+export class SetNativeDialogHandlerCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.setNativeDialogHandler, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
             { name: 'dialogHandler', init: initDialogHandler, required: true }
         ];
+    }
+
+    static from (val) {
+        const dialogHandlerStub = {
+            dialogHandler: { fn: null }
+        };
+
+        const command = new SetNativeDialogHandlerCommand(dialogHandlerStub);
+
+        command.dialogHandler = val.dialogHandler;
+
+        return command;
     }
 }
 
@@ -424,14 +521,9 @@ export class GetBrowserConsoleMessagesCommand {
     }
 }
 
-export class SetTestSpeedCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type  = TYPE.setTestSpeed;
-        this.speed = null;
-
-        this._assignFrom(obj, true);
+export class SetTestSpeedCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.setTestSpeed, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -441,14 +533,9 @@ export class SetTestSpeedCommand extends Assignable {
     }
 }
 
-export class SetPageLoadTimeoutCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type     = TYPE.setPageLoadTimeout;
-        this.duration = null;
-
-        this._assignFrom(obj, true);
+export class SetPageLoadTimeoutCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.setPageLoadTimeout, validateProperties);
     }
 
     _getAssignableProperties () {
@@ -458,19 +545,27 @@ export class SetPageLoadTimeoutCommand extends Assignable {
     }
 }
 
-export class UseRoleCommand extends Assignable {
-    constructor (obj) {
-        super(obj);
-
-        this.type = TYPE.useRole;
-        this.role = null;
-
-        this._assignFrom(obj, true);
+export class UseRoleCommand extends CommandBase {
+    constructor (obj, testRun, validateProperties) {
+        super(obj, testRun, TYPE.useRole, validateProperties);
     }
 
     _getAssignableProperties () {
         return [
             { name: 'role', type: actionRoleArgument, required: true }
+        ];
+    }
+}
+
+export class RecorderCommand extends CommandBase {
+    constructor (obj, testRun) {
+        super(obj, testRun, TYPE.recorder);
+    }
+
+    _getAssignableProperties () {
+        return [
+            { name: 'subtype', type: nonEmptyStringArgument, required: true },
+            { name: 'forceExecutionInTopWindowOnly', type: booleanArgument, defaultValue: false }
         ];
     }
 }

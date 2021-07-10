@@ -1,13 +1,6 @@
 import TYPE from './type';
 
 // Commands
-export class PrepareBrowserManipulationCommand {
-    constructor (manipulationCommandType) {
-        this.type                    = TYPE.prepareBrowserManipulation;
-        this.manipulationCommandType = manipulationCommandType;
-    }
-}
-
 export class ShowAssertionRetriesStatusCommand {
     constructor (timeout) {
         this.type    = TYPE.showAssertionRetriesStatus;
@@ -23,9 +16,10 @@ export class HideAssertionRetriesStatusCommand {
 }
 
 export class SetBreakpointCommand {
-    constructor (isTestError) {
-        this.type        = TYPE.setBreakpoint;
-        this.isTestError = isTestError;
+    constructor (isTestError, inCompilerService) {
+        this.type              = TYPE.setBreakpoint;
+        this.inCompilerService = inCompilerService;
+        this.isTestError       = isTestError;
     }
 }
 
@@ -38,5 +32,17 @@ export class TestDoneCommand {
 export class BackupStoragesCommand {
     constructor () {
         this.type = TYPE.backupStorages;
+    }
+}
+
+export class UnlockPageCommand {
+    constructor () {
+        this.type = TYPE.unlockPage;
+    }
+}
+
+export class GetActiveElementCommand {
+    constructor () {
+        this.type = TYPE.getActiveElement;
     }
 }

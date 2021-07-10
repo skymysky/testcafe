@@ -1,11 +1,10 @@
 /* global Symbol */
-import Promise from 'pinkie';
 import { assignIn } from 'lodash';
 import promisifyEvent from 'promisify-event';
 import BROWSER_JOB_RESULT from '../../runner/browser-job-result';
 import BrowserConnection from '../connection';
 import WARNING_MESSAGE from '../../notifications/warning-message';
-
+import { generateUniqueId } from 'testcafe-hammerhead';
 
 const name = Symbol();
 
@@ -24,37 +23,49 @@ export default class BrowserProviderPluginHost {
         return this[name];
     }
 
-    runInitScript (browserId, code) {
-        var connection = BrowserConnection.getById(browserId);
+    async runInitScript (browserId, code) {
+        const connection = BrowserConnection.getById(browserId);
 
         return connection.runInitScript(`(${code})()`);
     }
 
-    waitForConnectionReady (browserId) {
-        var connection = BrowserConnection.getById(browserId);
+    calculateWindowId () {
+        return generateUniqueId();
+    }
 
-        if (connection.ready)
+    waitForConnectionReady (browserId) {
+        const connection = BrowserConnection.getById(browserId);
+
+        if (connection.isReady())
             return Promise.resolve();
 
         return promisifyEvent(connection, 'ready');
     }
 
     reportWarning (browserId, ...args) {
-        var connection = BrowserConnection.getById(browserId);
+        const connection = BrowserConnection.getById(browserId);
 
         connection.addWarning(...args);
     }
 
-    setUserAgentMetaInfo (browserId, message) {
-        var connection = BrowserConnection.getById(browserId);
+    setUserAgentMetaInfo (browserId, message, ...args) {
+        const connection = BrowserConnection.getById(browserId);
 
-        connection.setProviderMetaInfo(message);
+        connection.setProviderMetaInfo(message, ...args);
     }
 
     async closeLocalBrowser (browserId) {
-        var connection = BrowserConnection.getById(browserId);
+        const connection = BrowserConnection.getById(browserId);
 
+        await connection.provider._ensureBrowserWindowDescriptor(browserId);
         await connection.provider._closeLocalBrowser(browserId);
+    }
+
+    async resizeLocalBrowserWindow (browserId, width, height, currentWidth, currentHeight) {
+        const connection = BrowserConnection.getById(browserId);
+
+        await connection.provider._ensureBrowserWindowParameters(browserId);
+        await connection.provider._resizeLocalBrowserWindow(browserId, width, height, currentWidth, currentHeight);
     }
 
     // API
@@ -87,7 +98,17 @@ export default class BrowserProviderPluginHost {
     }
 
     // Extra functions
-    async isLocalBrowser (/* browserId, browserName */) {
+    // NOTE:
+    // The browserName argument is optional, and must be supplied if the browserId argument is not valid
+    // (browser is not opened)
+    async isLocalBrowser (/* browserId[, browserName] */) {
+        return false;
+    }
+
+    // NOTE:
+    // The browserName argument is optional, and must be supplied if the browserId argument is not valid
+    // (browser is not opened)
+    isHeadlessBrowser (/* browserId[, browserName] */) {
         return false;
     }
 
@@ -96,8 +117,10 @@ export default class BrowserProviderPluginHost {
             hasCloseBrowser:                this.hasOwnProperty('closeBrowser'),
             hasResizeWindow:                this.hasOwnProperty('resizeWindow'),
             hasTakeScreenshot:              this.hasOwnProperty('takeScreenshot'),
+            hasGetVideoFrameData:           this.hasOwnProperty('getVideoFrameData'),
             hasCanResizeWindowToDimensions: this.hasOwnProperty('canResizeWindowToDimensions'),
-            hasMaximizeWindow:              this.hasOwnProperty('maximizeWindow')
+            hasMaximizeWindow:              this.hasOwnProperty('maximizeWindow'),
+            hasChromelessScreenshots:       false
         };
     }
 
@@ -117,7 +140,17 @@ export default class BrowserProviderPluginHost {
         this.reportWarning(browserId, WARNING_MESSAGE.maximizeNotSupportedByBrowserProvider, this[name]);
     }
 
+    async getVideoFrameData (browserId) {
+        const browserAlias = BrowserConnection.getById(browserId).browserInfo.alias;
+
+        this.reportWarning(browserId, WARNING_MESSAGE.videoNotSupportedByBrowser, browserAlias);
+    }
+
     async reportJobResult (/*browserId, status, data*/) {
         return;
+    }
+
+    getConfig (value) {
+        return value;
     }
 }

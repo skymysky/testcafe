@@ -1,22 +1,22 @@
-var hammerhead    = window.getTestCafeModule('hammerhead');
-var browserUtils  = hammerhead.utils.browser;
-var nativeMethods = hammerhead.nativeMethods;
+const hammerhead    = window.getTestCafeModule('hammerhead');
+const browserUtils  = hammerhead.utils.browser;
+const nativeMethods = hammerhead.nativeMethods;
 
-var testCafeCore      = window.getTestCafeModule('testCafeCore');
-var parseKeySequence  = testCafeCore.get('./utils/parse-key-sequence');
+const testCafeCore      = window.getTestCafeModule('testCafeCore');
+const parseKeySequence  = testCafeCore.parseKeySequence;
 
-var testCafeAutomation = window.getTestCafeModule('testCafeAutomation');
-var TypeAutomation     = testCafeAutomation.Type;
-var PressAutomation    = testCafeAutomation.Press;
-var TypeOptions        = testCafeAutomation.get('../../test-run/commands/options').TypeOptions;
+const testCafeAutomation = window.getTestCafeModule('testCafeAutomation');
+const TypeAutomation     = testCafeAutomation.Type;
+const PressAutomation    = testCafeAutomation.Press;
+const TypeOptions        = testCafeAutomation.TypeOptions;
 
 testCafeCore.preventRealEvents();
 
 $(document).ready(function () {
-    var $commonInput = null;
+    let $commonInput = null;
 
     //constants
-    var TEST_ELEMENT_CLASS = 'testElement';
+    const TEST_ELEMENT_CLASS = 'testElement';
 
 
     //tests
@@ -30,10 +30,10 @@ $(document).ready(function () {
     });
 
     asyncTest('typetext events', function () {
-        var keydownCount    = 0;
-        var keyupCount      = 0;
-        var keypressCount   = 0;
-        var mouseclickCount = 0;
+        let keydownCount    = 0;
+        let keyupCount      = 0;
+        let keypressCount   = 0;
+        let mouseclickCount = 0;
 
         $commonInput
             .keydown(function () {
@@ -49,15 +49,20 @@ $(document).ready(function () {
                 mouseclickCount++;
             });
 
-        var type = new TypeAutomation($commonInput[0], 'HI', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+        const type = new TypeAutomation($commonInput[0], 'HI', new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
         type
             .run()
             .then(function () {
-                equal(keydownCount, 2, 'keydown event raises twice');
-                equal(keyupCount, 2, 'keyup event raises twice');
-                equal(keypressCount, 2, 'keypress event raises twice');
-                equal(mouseclickCount, 1, 'click event raises once');
+                const expectedKeydownCount    = 2;
+                const expectedKeypressCount   = browserUtils.isAndroid ? 0 : 2;
+                const expectedKeyupCount      = 2;
+                const expectedMouseClickCount = 1;
+
+                equal(keydownCount, expectedKeydownCount, 'keydown event raises twice');
+                equal(keyupCount, expectedKeyupCount, 'keyup event raises twice');
+                equal(keypressCount, expectedKeypressCount, 'keypress event raises twice');
+                equal(mouseclickCount, expectedMouseClickCount, 'click event raises once');
 
                 start();
             });
@@ -66,15 +71,15 @@ $(document).ready(function () {
     asyncTest('input value changed', function () {
         $('<input type="text" id="input1" class="input"/>').addClass(TEST_ELEMENT_CLASS).appendTo($('body'));
 
-        var $inputs = $('.' + TEST_ELEMENT_CLASS);
-        var text    = 'Hello, world!';
+        const $inputs = $('.' + TEST_ELEMENT_CLASS);
+        const text    = 'Hello, world!';
 
-        var firstType = new TypeAutomation($inputs[0], text, new TypeOptions({ offsetX: 5, offsetY: 5 }));
+        const firstType = new TypeAutomation($inputs[0], text, new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
         firstType
             .run()
             .then(function () {
-                var secondType = new TypeAutomation($inputs[1], text, new TypeOptions({ offsetX: 5, offsetY: 5 }));
+                const secondType = new TypeAutomation($inputs[1], text, new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
                 return secondType.run();
             })
@@ -86,36 +91,38 @@ $(document).ready(function () {
             });
     });
 
-    asyncTest('correct keyCode', function () {
-        var key = 'k';
+    if (!browserUtils.isAndroid) {
+        asyncTest('correct keyCode', function () {
+            const key = 'k';
 
-        $commonInput[0].onkeypress = function (e) {
-            equal((e || window.event).keyCode, key.charCodeAt(0), 'keypress event argument is correct');
-        };
+            $commonInput[0].onkeypress = function (e) {
+                equal((e || window.event).keyCode, key.charCodeAt(0), 'keypress event argument is correct');
+            };
 
-        var type = new TypeAutomation($commonInput[0], key, new TypeOptions({ offsetX: 5, offsetY: 5 }));
+            const type = new TypeAutomation($commonInput[0], key, new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
-        type
-            .run()
-            .then(function () {
-                expect(1);
-                start();
-            });
-    });
+            type
+                .run()
+                .then(function () {
+                    expect(1);
+                    start();
+                });
+        });
+    }
 
     asyncTest('typetext to inner input', function () {
-        var $outerDiv = $('<div></div>')
+        const $outerDiv = $('<div></div>')
             .css({
                 width:  '100px',
                 height: '50px'
             })
             .addClass(TEST_ELEMENT_CLASS).appendTo('body');
 
-        var text = 'Hi';
+        const text = 'Hi';
 
         $commonInput.appendTo($outerDiv);
 
-        var type = new TypeAutomation($outerDiv[0], text, new TypeOptions());
+        const type = new TypeAutomation($outerDiv[0], text, new TypeOptions());
 
         type
             .run()
@@ -126,8 +133,9 @@ $(document).ready(function () {
     });
 
     asyncTest('do not click when element is focused', function () {
-        var clickCount = 0;
-        var text       = 'test';
+        const text = 'test';
+
+        let clickCount = 0;
 
         $commonInput.click(function () {
             clickCount++;
@@ -135,7 +143,7 @@ $(document).ready(function () {
 
         $commonInput[0].focus();
 
-        var type = new TypeAutomation($commonInput[0], text, new TypeOptions());
+        const type = new TypeAutomation($commonInput[0], text, new TypeOptions());
 
         type
             .run()
@@ -147,11 +155,11 @@ $(document).ready(function () {
     });
 
     asyncTest('set option.replace to true to replace current text', function () {
-        var text = 'new text';
+        const text = 'new text';
 
         $commonInput[0].value = 'old text';
 
-        var type = new TypeAutomation($commonInput[0], text, new TypeOptions({ replace: true, offsetX: 5, offsetY: 5 }));
+        const type = new TypeAutomation($commonInput[0], text, new TypeOptions({ replace: true, offsetX: 5, offsetY: 5 }));
 
         type
             .run()
@@ -162,10 +170,11 @@ $(document).ready(function () {
     });
 
     asyncTest('set option.paste to true to insert all text in one keystroke', function () {
-        var keydownCount    = 0;
-        var keyupCount      = 0;
-        var keypressCount   = 0;
-        var text = 'new text';
+        const text = 'new text';
+
+        let keydownCount    = 0;
+        let keyupCount      = 0;
+        let keypressCount   = 0;
 
         $commonInput[0].value = '';
 
@@ -179,31 +188,35 @@ $(document).ready(function () {
             keyupCount++;
         });
 
-        var type = new TypeAutomation($commonInput[0], text, new TypeOptions({ paste: true, offsetX: 5, offsetY: 5 }));
+        const type = new TypeAutomation($commonInput[0], text, new TypeOptions({ paste: true, offsetX: 5, offsetY: 5 }));
+
+        const expectedKeydownCount  = 1;
+        const expectedKeypressCount = browserUtils.isAndroid ? 0 : 1;
+        const expectedKeyupCount    = 1;
 
         type
             .run()
             .then(function () {
                 equal($commonInput[0].value, text, 'text entered in one keystroke');
-                equal(keydownCount, 1, 'keydown event raises once');
-                equal(keyupCount, 1, 'keyup event raises once');
-                equal(keypressCount, 1, 'keypress event raises once');
+                equal(keydownCount, expectedKeydownCount, 'keydown event raises once');
+                equal(keyupCount, expectedKeyupCount, 'keyup event raises once');
+                equal(keypressCount, expectedKeypressCount, 'keypress event raises once');
                 start();
             });
     });
 
     asyncTest('do not change readonly inputs value', function () {
-        var $input1      = $('<input type="text" readonly />').addClass(TEST_ELEMENT_CLASS).appendTo($('body'));
-        var $input2      = $('<input type="text" value="value" />').attr('readonly', 'readonly').addClass(TEST_ELEMENT_CLASS).appendTo($('body'));
-        var oldInput1Val = $input1.val();
-        var oldInput2Val = $input2.val();
+        const $input1      = $('<input type="text" readonly />').addClass(TEST_ELEMENT_CLASS).appendTo($('body'));
+        const $input2      = $('<input type="text" value="value" />').attr('readonly', 'readonly').addClass(TEST_ELEMENT_CLASS).appendTo($('body'));
+        const oldInput1Val = $input1.val();
+        const oldInput2Val = $input2.val();
 
-        var firstType = new TypeAutomation($input1[0], 'test', new TypeOptions());
+        const firstType = new TypeAutomation($input1[0], 'test', new TypeOptions());
 
         firstType
             .run()
             .then(function () {
-                var secondType = new TypeAutomation($input2[0], 'test', new TypeOptions());
+                const secondType = new TypeAutomation($input2[0], 'test', new TypeOptions());
 
                 return secondType.run();
             })
@@ -217,15 +230,15 @@ $(document).ready(function () {
     module('regression tests');
 
     asyncTest('input event raising (B253410)', function () {
-        var $input = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var $div   = $('<div></div>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+        const $input = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+        const $div   = $('<div></div>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
 
         $input.bind('input', function () {
             $div.text($div.text() + $input.val());
             $input.val('');
         });
 
-        var type = new TypeAutomation($input[0], 'test', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+        const type = new TypeAutomation($input[0], 'test', new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
         type
             .run()
@@ -236,47 +249,91 @@ $(document).ready(function () {
             });
     });
 
-    asyncTest('change event must not be raised if keypress was prevented (B253816)', function () {
-        var $input  = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var changed = false;
+    if (!browserUtils.isAndroid) {
+        asyncTest('change event must not be raised if keypress was prevented (B253816)', function () {
+            const $input = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
 
-        $input.bind('change', function () {
-            changed = true;
+            let changed = false;
+
+            $input.bind('change', function () {
+                changed = true;
+            });
+
+            const firstType = new TypeAutomation($input[0], 'test', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+
+            firstType
+                .run()
+                .then(function () {
+                    $input[0].blur();
+
+                    ok(changed, 'check change event was raised if keypress was not prevented');
+
+                    changed = false;
+
+                    $input.bind('keypress', function (e) {
+                        e.target.value += String.fromCharCode(e.keyCode);
+                        return false;
+                    });
+
+                    const secondType = new TypeAutomation($input[0], 'new', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+
+                    return secondType.run();
+                })
+                .then(function () {
+                    $input[0].blur();
+
+                    ok(!changed, 'check change event was not raised if keypress was prevented');
+                    start();
+                });
         });
 
-        var firstType = new TypeAutomation($input[0], 'test', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+        asyncTest('change event can be raised after prevented keypress if there are unsaved changes (GH-4881)', function () {
+            const $input = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
 
-        firstType
-            .run()
-            .then(function () {
-                $input[0].blur();
+            let changed = false;
 
-                ok(changed, 'check change event was raised if keypress was not prevented');
+            $input.bind('change', function () {
+                changed = true;
+            });
 
-                changed = false;
-
-                $input.bind('keypress', function (e) {
+            $input.bind('keypress', function (e) {
+                if (e.key === '-') {
                     e.target.value += String.fromCharCode(e.keyCode);
                     return false;
-                });
+                }
 
-                var secondType = new TypeAutomation($input[0], 'new', new TypeOptions({ offsetX: 5, offsetY: 5 }));
-
-                return secondType.run();
-            })
-            .then(function () {
-                $input[0].blur();
-
-                ok(!changed, 'check change event was not raised if keypress was prevented');
-                start();
+                return true;
             });
-    });
+
+            const firstType = new TypeAutomation($input[0], 'test-', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+
+            firstType
+                .run()
+                .then(function () {
+                    $input[0].blur();
+
+                    ok(changed, 'change event raised on prevented keypress with unsaved data check');
+
+                    changed = false;
+
+                    const secondType = new TypeAutomation($input[0], '---', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+
+                    return secondType.run();
+                })
+                .then(function () {
+                    $input[0].blur();
+
+                    ok(!changed, 'change event not raised on prevented keypress with no unsaved data check');
+                    start();
+                });
+        });
+    }
 
     asyncTest('keypress args must contain charCode of the symbol, not keyCode', function () {
-        var $input   = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var symbol   = '!';
-        var charCode = 33;
-        var keyCode  = 49;
+        const $input   = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+        const symbol   = '!';
+        const charCode = 33;
+        const keyCode  = 49;
 
         $input.bind('keypress', function (e) {
             equal(e.keyCode, charCode, 'keyCode on keypress checked');
@@ -287,7 +344,7 @@ $(document).ready(function () {
             equal(e.keyCode, keyCode, 'keyCode on keydown checked');
         });
 
-        var type = new TypeAutomation($input[0], symbol, new TypeOptions({ offsetX: 5, offsetY: 5 }));
+        const type = new TypeAutomation($input[0], symbol, new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
         type
             .run()
@@ -298,14 +355,15 @@ $(document).ready(function () {
     });
 
     asyncTest('T138385 - "input" event is raised if symbol count more than "maxlength" attribute (act.type)', function () {
-        var $input          = $('<input type="text" maxlength="3"/>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var inputEventCount = 0;
+        const $input          = $('<input type="text" maxlength="3"/>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+
+        let inputEventCount = 0;
 
         $input.bind('input', function () {
             inputEventCount++;
         });
 
-        var type = new TypeAutomation($input[0], 'test', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+        const type = new TypeAutomation($input[0], 'test', new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
         type
             .run()
@@ -317,8 +375,9 @@ $(document).ready(function () {
     });
 
     asyncTest('T138385 - "input" event is raised if symbol count more than "maxlength" attribute (act.press)', function () {
-        var $input          = $('<input type="text" maxlength="3"/>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var inputEventCount = 0;
+        const $input = $('<input type="text" maxlength="3"/>').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+
+        let inputEventCount = 0;
 
         $input.bind('input', function () {
             inputEventCount++;
@@ -326,7 +385,7 @@ $(document).ready(function () {
 
         $input.focus();
 
-        var press = new PressAutomation(parseKeySequence('t e s t').combinations, {});
+        const press = new PressAutomation(parseKeySequence('t e s t').combinations, {});
 
         press
             .run()
@@ -338,9 +397,9 @@ $(document).ready(function () {
     });
 
     asyncTest('T239547: TD15.1 - Playback problems on https://jsfiddle.net/', function () {
-        var $input   = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
-        var charCode = 45;
-        var keyCode  = browserUtils.isFirefox ? 173 : 189;
+        const $input   = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body');
+        const charCode = 45;
+        const keyCode  = browserUtils.isFirefox ? 173 : 189;
 
         $input.bind('keypress', function (e) {
             equal(e.keyCode, charCode, 'keyCode on keypress checked');
@@ -351,7 +410,7 @@ $(document).ready(function () {
             equal(e.keyCode, keyCode, 'keyCode on keydown checked');
         });
 
-        var type = new TypeAutomation($input[0], '-', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+        const type = new TypeAutomation($input[0], '-', new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
         type
             .run()
@@ -361,54 +420,96 @@ $(document).ready(function () {
             });
     });
 
-    if (!browserUtils.isSafari && (!browserUtils.isChrome || browserUtils.version > 53)) {
-        asyncTest('T334620 - Wrong "key" property in keyEvent objects (type)', function () {
-            var textarea = document.createElement('textarea');
+    asyncTest('GH-4068 - Type to element wrapped in label', function () {
+        const input1 = document.createElement('input');
+        const input2 = document.createElement('input');
+        const label  = document.createElement('label');
 
-            textarea.className = TEST_ELEMENT_CLASS;
+        input1.className = TEST_ELEMENT_CLASS;
+        input2.className = TEST_ELEMENT_CLASS;
+        label.className  = TEST_ELEMENT_CLASS;
 
-            document.body.appendChild(textarea);
+        input1.id = 'input-1';
+        input2.id = 'input-2';
 
-            var keydownKeyProperty  = '';
-            var keypressKeyProperty = '';
-            var keyupKeyProperty    = '';
+        label.setAttribute('for', input2.id);
 
-            textarea.addEventListener('keydown', function (e) {
-                keydownKeyProperty += e.key;
+        label.appendChild(input1);
+        label.appendChild(input2);
+
+        document.body.appendChild(label);
+
+        const type = new TypeAutomation(input1, '12345', {});
+
+        type
+            .run()
+            .then(function () {
+                // NOTE: in safari target input element is not focused on click
+                // it loses its focus immediately after click
+                // so it's impossible to type into it
+                const expected = !browserUtils.isSafari ? '12345' : '';
+
+                equal(input1.value, expected);
+
+                start();
             });
 
-            textarea.addEventListener('keypress', function (e) {
-                keypressKeyProperty += e.key;
-            });
+    });
 
-            textarea.addEventListener('keyup', function (e) {
-                keyupKeyProperty += e.key;
-            });
 
-            var type = new TypeAutomation(textarea, 'aA \r', new TypeOptions({ offsetX: 1, offsetY: 1 }));
+    asyncTest('T334620, GH-3282 - Wrong "key" property in keyEvent objects (type)', function () {
+        const textarea = document.createElement('textarea');
 
-            type
-                .run()
-                .then(function () {
-                    equal(keydownKeyProperty, 'aA Enter');
-                    equal(keypressKeyProperty, 'aA Enter');
-                    equal(keyupKeyProperty, 'aA Enter');
-                    equal(textarea.value, 'aA \n');
-                    start();
-                });
+        textarea.className = TEST_ELEMENT_CLASS;
+
+        document.body.appendChild(textarea);
+
+        let keydownKeyProperty  = '';
+        let keypressKeyProperty = '';
+        let keyupKeyProperty    = '';
+
+        textarea.addEventListener('keydown', function (e) {
+            keydownKeyProperty += e.key;
         });
-    }
-    else {
+
+        textarea.addEventListener('keypress', function (e) {
+            keypressKeyProperty += e.key;
+        });
+
+        textarea.addEventListener('keyup', function (e) {
+            keyupKeyProperty += e.key;
+        });
+
+        const type = new TypeAutomation(textarea, 'aA \r', new TypeOptions({ offsetX: 1, offsetY: 1 }));
+
+        type
+            .run()
+            .then(function () {
+                const expectedKeydownKeyProperty  = 'aA Enter';
+                const expectedKeypressKeyProperty = browserUtils.isAndroid ? '' : 'aA Enter';
+                const expectedKeyupKeyProperty    = 'aA Enter';
+                const expectedTextareaValue       = 'aA \n';
+
+                equal(keydownKeyProperty, expectedKeydownKeyProperty);
+                equal(keypressKeyProperty, expectedKeypressKeyProperty);
+                equal(keyupKeyProperty, expectedKeyupKeyProperty);
+                equal(textarea.value, expectedTextareaValue);
+
+                start();
+            });
+    });
+
+    if (browserUtils.isSafari) {
         asyncTest('T334620 - Wrong "keyIdentifier" property in keyEvent objects (type)', function () {
-            var textarea = document.createElement('textarea');
+            const textarea = document.createElement('textarea');
 
             textarea.className = TEST_ELEMENT_CLASS;
 
             document.body.appendChild(textarea);
 
-            var keydownKeyIdentifierProperty  = '';
-            var keypressKeyIdentifierProperty = '';
-            var keyupKeyIdentifierProperty    = '';
+            let keydownKeyIdentifierProperty  = '';
+            let keypressKeyIdentifierProperty = '';
+            let keyupKeyIdentifierProperty    = '';
 
             textarea.addEventListener('keydown', function (e) {
                 keydownKeyIdentifierProperty += e.keyIdentifier;
@@ -422,14 +523,14 @@ $(document).ready(function () {
                 keyupKeyIdentifierProperty += e.keyIdentifier;
             });
 
-            var type = new TypeAutomation(textarea, 'aA \r', new TypeOptions({ offsetX: 1, offsetY: 1 }));
+            const type = new TypeAutomation(textarea, 'aA \r', new TypeOptions({ offsetX: 1, offsetY: 1 }));
 
-            var s = {
+            const s = {
                 ' ': 'U+0020',
                 'a': 'U+0041'
             };
 
-            var expectedKeySequence = s['a'] + s['a'] + s[' '] + 'Enter';
+            const expectedKeySequence = s['a'] + s['a'] + s[' '] + 'Enter';
 
             type
                 .run()
@@ -443,14 +544,260 @@ $(document).ready(function () {
         });
     }
 
+    if (nativeMethods.WindowInputEvent && !browserUtils.isFirefox) {
+        const expectedAllEvents = [
+            { type: 'beforeinput', data: '1' },
+            { type: 'textInput', data: '1' },
+            { type: 'input', data: '1' },
+            { type: 'beforeinput', data: '2' },
+            { type: 'textInput', data: '2' },
+            { type: 'input', data: '2' },
+            { type: 'beforeinput', data: '3' },
+            { type: 'textInput', data: '3' },
+            { type: 'input', data: '3' },
+        ];
+
+        const expectedAllEventsReversed = [
+            { type: 'textInput', data: '1' },
+            { type: 'beforeinput', data: '1' },
+            { type: 'input', data: '1' },
+            { type: 'textInput', data: '2' },
+            { type: 'beforeinput', data: '2' },
+            { type: 'input', data: '2' },
+            { type: 'textInput', data: '3' },
+            { type: 'beforeinput', data: '3' },
+            { type: 'input', data: '3' }
+        ];
+
+        const expectedEventsWithoutInput = [
+            { type: 'beforeinput', data: '1' },
+            { type: 'textInput', data: '1' },
+            { type: 'beforeinput', data: '2' },
+            { type: 'textInput', data: '2' },
+            { type: 'beforeinput', data: '3' },
+            { type: 'textInput', data: '3' },
+        ];
+
+        const expectedEventsWithoutInputReversed = [
+            { type: 'textInput', data: '1' },
+            { type: 'beforeinput', data: '1' },
+            { type: 'textInput', data: '2' },
+            { type: 'beforeinput', data: '2' },
+            { type: 'textInput', data: '3' },
+            { type: 'beforeinput', data: '3' },
+        ];
+
+        const expectedOnlyBeforeInput = [
+            { type: 'beforeinput', data: '1' },
+            { type: 'beforeinput', data: '2' },
+            { type: 'beforeinput', data: '3' }
+        ];
+
+        const expectedOnlyTextInput = [
+            { type: 'textInput', data: '1' },
+            { type: 'textInput', data: '2' },
+            { type: 'textInput', data: '3' }
+        ];
+
+        asyncTest('Should fire `beforeInput` event', function () {
+            const input1 = document.createElement('input');
+            const input2 = document.createElement('input');
+            const input3 = document.createElement('input');
+
+            input1.className = TEST_ELEMENT_CLASS;
+            input2.className = TEST_ELEMENT_CLASS;
+            input3.className = TEST_ELEMENT_CLASS;
+
+            document.body.appendChild(input1);
+            document.body.appendChild(input2);
+            document.body.appendChild(input3);
+
+            const log1 = [];
+            const log2 = [];
+            const log3 = [];
+
+            function logEvents (e, log) {
+                log.push({ type: e.type, data: e.data });
+            }
+
+            input1.addEventListener('beforeinput', function (e) {
+                logEvents(e, log1);
+            });
+
+            input1.addEventListener('textInput', function (e) {
+                logEvents(e, log1);
+            });
+
+            input1.addEventListener('input', function (e) {
+                logEvents(e, log1);
+            });
+
+            input2.addEventListener('beforeinput', function (e) {
+                logEvents(e, log2);
+
+                e.preventDefault();
+            });
+
+            input2.addEventListener('textInput', function (e) {
+                logEvents(e, log2);
+            });
+
+            input2.addEventListener('input', function (e) {
+                logEvents(e, log2);
+            });
+
+            input3.addEventListener('beforeinput', function (e) {
+                logEvents(e, log3);
+            });
+
+            input3.addEventListener('textInput', function (e) {
+                logEvents(e, log3);
+
+                e.preventDefault();
+            });
+
+            input3.addEventListener('input', function (e) {
+                logEvents(e, log3);
+            });
+
+            const automation1 = new TypeAutomation(input1, '123', new TypeOptions());
+            const automation2 = new TypeAutomation(input2, '123', new TypeOptions());
+            const automation3 = new TypeAutomation(input3, '123', new TypeOptions());
+
+            return automation1.run()
+                .then(function () {
+                    return automation2.run();
+                })
+                .then(function () {
+                    return automation3.run();
+                })
+                .then(function () {
+                    if (browserUtils.isChrome) {
+                        deepEqual(log1, expectedAllEvents);
+                        deepEqual(log2, expectedOnlyBeforeInput);
+                        deepEqual(log3, expectedEventsWithoutInput);
+                    }
+
+                    if (browserUtils.isSafari) {
+                        deepEqual(log1, expectedAllEventsReversed);
+                        deepEqual(log2, expectedEventsWithoutInputReversed);
+                        deepEqual(log3, expectedOnlyTextInput);
+                    }
+
+                    strictEqual(input1.value, '123');
+                    strictEqual(input2.value, '');
+                    strictEqual(input3.value, '');
+
+                    start();
+                });
+        });
+
+        asyncTest('Should fire `beforeInput` event in contenteditable div', function () {
+            const input1 = document.createElement('div');
+            const input2 = document.createElement('div');
+            const input3 = document.createElement('div');
+
+            input1.contentEditable = true;
+            input2.contentEditable = true;
+            input3.contentEditable = true;
+
+            input1.className = TEST_ELEMENT_CLASS;
+            input2.className = TEST_ELEMENT_CLASS;
+            input3.className = TEST_ELEMENT_CLASS;
+
+            document.body.appendChild(input1);
+            document.body.appendChild(input2);
+            document.body.appendChild(input3);
+
+            const log1 = [];
+            const log2 = [];
+            const log3 = [];
+
+            function logEvents (e, log) {
+                log.push({ type: e.type, data: e.data });
+            }
+
+            input1.addEventListener('beforeinput', function (e) {
+                logEvents(e, log1);
+            });
+
+            input1.addEventListener('textInput', function (e) {
+                logEvents(e, log1);
+            });
+
+            input1.addEventListener('input', function (e) {
+                logEvents(e, log1);
+            });
+
+            input2.addEventListener('beforeinput', function (e) {
+                logEvents(e, log2);
+
+                e.preventDefault();
+            });
+
+            input2.addEventListener('textInput', function (e) {
+                logEvents(e, log2);
+            });
+
+            input2.addEventListener('input', function (e) {
+                logEvents(e, log2);
+            });
+
+            input3.addEventListener('beforeinput', function (e) {
+                logEvents(e, log3);
+            });
+
+            input3.addEventListener('textInput', function (e) {
+                logEvents(e, log3);
+
+                e.preventDefault();
+            });
+
+            input3.addEventListener('input', function (e) {
+                logEvents(e, log3);
+            });
+
+            const automation1 = new TypeAutomation(input1, '123', new TypeOptions());
+            const automation2 = new TypeAutomation(input2, '123', new TypeOptions());
+            const automation3 = new TypeAutomation(input3, '123', new TypeOptions());
+
+            return automation1.run()
+                .then(function () {
+                    return automation2.run();
+                })
+                .then(function () {
+                    return automation3.run();
+                })
+                .then(function () {
+                    if (browserUtils.isChrome) {
+                        deepEqual(log1, expectedAllEvents);
+                        deepEqual(log2, expectedOnlyBeforeInput);
+                        deepEqual(log3, expectedEventsWithoutInput);
+                    }
+
+                    if (browserUtils.isSafari) {
+                        deepEqual(log1, expectedAllEventsReversed);
+                        deepEqual(log2, expectedAllEventsReversed);
+                        deepEqual(log3, expectedOnlyTextInput);
+                    }
+
+                    strictEqual(input1.innerText, '123');
+                    strictEqual(input2.innerText, '');
+                    strictEqual(input3.innerText, '');
+
+                    start();
+                });
+        });
+    }
+
     if (nativeMethods.inputValueSetter) {
         asyncTest('call native setter of the value property (GH-1558)', function () {
-            var input    = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body')[0];
-            var textArea = $('<textarea/>').addClass(TEST_ELEMENT_CLASS).appendTo('body')[0];
+            const input    = $('<input type="text" />').addClass(TEST_ELEMENT_CLASS).appendTo('body')[0];
+            const textArea = $('<textarea/>').addClass(TEST_ELEMENT_CLASS).appendTo('body')[0];
 
-            var testNativeValueSetter = function (element, callback) {
-                var valueGetter = Object.getOwnPropertyDescriptor(element.constructor.prototype, 'value').get;
-                var type        = new TypeAutomation(element, '1', new TypeOptions({ offsetX: 5, offsetY: 5 }));
+            const testNativeValueSetter = function (element, callback) {
+                const valueGetter = Object.getOwnPropertyDescriptor(element.constructor.prototype, 'value').get;
+                const type        = new TypeAutomation(element, '1', new TypeOptions({ offsetX: 5, offsetY: 5 }));
 
                 Object.defineProperty(element, 'value', {
                     get: function () {

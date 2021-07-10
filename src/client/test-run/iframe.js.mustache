@@ -4,8 +4,14 @@
         selectorTimeout: {{{selectorTimeout}}},
         pageLoadTimeout: {{{pageLoadTimeout}}},
         dialogHandler:   {{{dialogHandler}}},
+        retryTestPages:  {{{retryTestPages}}},
         speed:           {{{speed}}}
     });
 
     driver.start();
+
+    Object.defineProperty(window, '%testCafeDriverInstance%', {
+        configurable: true,
+        value:        driver
+    });
 })();

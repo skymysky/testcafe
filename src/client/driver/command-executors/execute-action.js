@@ -1,20 +1,17 @@
-import { Promise } from '../deps/hammerhead';
+import { Promise, nativeMethods } from '../deps/hammerhead';
+import { SelectorElementActionTransform, createReplicator } from './client-functions/replicator';
+
 import {
     domUtils,
+    promiseUtils,
     contentEditable,
-    RequestBarrier,
-    pageUnloadBarrier,
     parseKeySequence,
-    delay,
-    NODE_TYPE_DESCRIPTIONS
+    delay
 } from '../deps/testcafe-core';
 
-import ScriptExecutionBarrier from '../script-execution-barrier';
-
 import {
-    ERROR_TYPES as AUTOMATION_ERROR_TYPES,
     calculateSelectTextArguments,
-    getOffsetOptions,
+    DispatchEvent as DispatchEventAutomation,
     Click as ClickAutomation,
     SelectChildClick as SelectChildClickAutomation,
     RClick as RClickAutomation,
@@ -26,33 +23,34 @@ import {
     SelectText as SelectTextAutomation,
     SelectEditableContent as SelectEditableContentAutomation,
     Press as PressAutomation,
-    Upload as UploadAutomation
+    Upload as UploadAutomation,
+    ERROR_TYPES as AUTOMATION_ERROR_TYPES,
+    getOffsetOptions
 } from '../deps/testcafe-automation';
 
 import DriverStatus from '../status';
-import SelectorExecutor from './client-functions/selector-executor';
-import COMMAND_TYPE from '../../../test-run/commands/type';
+
+import runWithBarriers from '../utils/run-with-barriers';
+import {
+    ensureElements,
+    createElementDescriptor,
+    createAdditionalElementDescriptor
+} from '../utils/ensure-elements';
 
 import {
-    ActionElementNotFoundError,
     ActionElementIsInvisibleError,
-    ActionSelectorMatchesWrongNodeTypeError,
-    ActionAdditionalElementNotFoundError,
-    ActionAdditionalElementIsInvisibleError,
-    ActionAdditionalSelectorMatchesWrongNodeTypeError,
     ActionIncorrectKeysError,
-    ActionCanNotFindFileToUploadError,
+    ActionCannotFindFileToUploadError,
     ActionElementNonEditableError,
     ActionElementNonContentEditableError,
     ActionRootContainerNotFoundError,
     ActionElementNotTextAreaError,
     ActionElementIsNotFileInputError
-} from '../../../errors/test-run';
+} from '../../../shared/errors';
 
-
-const MAX_DELAY_AFTER_STEP                  = 2000;
-const CHECK_ELEMENT_IN_AUTOMATIONS_INTERVAL = 250;
-
+import COMMAND_TYPE from '../../../test-run/commands/type';
+import SetScrollAutomation from '../../automation/playback/set-scroll';
+import ScrollIntoViewAutomation from '../../automation/playback/scroll-into-view';
 
 // Ensure command element properties
 function ensureElementEditable (element) {
@@ -83,258 +81,287 @@ function ensureFileInput (element) {
         throw new ActionElementIsNotFileInputError();
 }
 
-function ensureCommandElementsProperties (command, elements) {
-    if (command.type === COMMAND_TYPE.selectText)
-        ensureElementEditable(elements[0]);
-
-    else if (command.type === COMMAND_TYPE.selectTextAreaContent)
-        ensureTextAreaElement(elements[0]);
-
-    else if (command.type === COMMAND_TYPE.selectEditableContent) {
-        ensureContentEditableElement(elements[0], 'startSelector');
-        ensureContentEditableElement(elements[1], 'endSelector');
-        ensureRootContainer(elements);
-    }
-
-    else if (command.type === COMMAND_TYPE.setFilesToUpload || command.type === COMMAND_TYPE.clearUpload)
-        ensureFileInput(elements[0]);
-}
-
-// Ensure command elements
-function ensureCommandElements (command, globalSelectorTimeout) {
-    var elements             = [];
-    var ensureElementPromise = Promise.resolve();
-    var startTime            = new Date();
-
-    var ensureElement = (selectorCommand, createNotFoundError, createIsInvisibleError, createHasWrongNodeTypeError) => {
-        ensureElementPromise = ensureElementPromise
-            .then(() => {
-                var selectorExecutor = new SelectorExecutor(selectorCommand, globalSelectorTimeout, startTime,
-                    createNotFoundError, createIsInvisibleError);
-
-                return selectorExecutor.getResult();
-            })
-            .then(el => {
-                if (!domUtils.isDomElement(el))
-                    throw createHasWrongNodeTypeError(NODE_TYPE_DESCRIPTIONS[el.nodeType]);
-
-                elements.push(el);
-            });
-    };
-
-    if (command.selector) {
-        ensureElement(
-            command.selector,
-            () => new ActionElementNotFoundError(),
-            () => new ActionElementIsInvisibleError(),
-            nodeDescription => new ActionSelectorMatchesWrongNodeTypeError(nodeDescription)
-        );
-    }
-
-    if (command.type === COMMAND_TYPE.dragToElement) {
-        ensureElement(
-            command.destinationSelector,
-            () => new ActionAdditionalElementNotFoundError('destinationSelector'),
-            () => new ActionAdditionalElementIsInvisibleError('destinationSelector'),
-            nodeDescription => new ActionAdditionalSelectorMatchesWrongNodeTypeError('destinationSelector', nodeDescription)
-        );
-    }
-
-    else if (command.type === COMMAND_TYPE.selectEditableContent) {
-        ensureElement(
-            command.startSelector,
-            () => new ActionAdditionalElementNotFoundError('startSelector'),
-            () => new ActionAdditionalElementIsInvisibleError('startSelector'),
-            nodeDescription => new ActionAdditionalSelectorMatchesWrongNodeTypeError('startSelector', nodeDescription)
-        );
-
-        ensureElement(
-            command.endSelector || command.startSelector,
-            () => new ActionAdditionalElementNotFoundError('endSelector'),
-            () => new ActionAdditionalElementIsInvisibleError('endSelector'),
-            nodeDescription => new ActionAdditionalSelectorMatchesWrongNodeTypeError('endSelector', nodeDescription)
-        );
-    }
-
-    return ensureElementPromise
-        .then(() => {
-            ensureCommandElementsProperties(command, elements);
-
-            return elements;
-        });
-}
-
-
-// Ensure options and arguments
-function ensureCommandArguments (command) {
-    if (command.type === COMMAND_TYPE.pressKey) {
-        var parsedKeySequence = parseKeySequence(command.keys);
-
-        if (parsedKeySequence.error)
-            throw new ActionIncorrectKeysError('keys');
-    }
-}
-
 function ensureOffsetOptions (element, options) {
-    var { offsetX, offsetY } = getOffsetOptions(element, options.offsetX, options.offsetY);
+    const { offsetX, offsetY } = getOffsetOptions(element, options.offsetX, options.offsetY);
 
     options.offsetX = offsetX;
     options.offsetY = offsetY;
 }
 
+const MAX_DELAY_AFTER_EXECUTION             = 2000;
+const CHECK_ELEMENT_IN_AUTOMATIONS_INTERVAL = 250;
 
-// Automations
-function createAutomation (elements, command) {
-    var selectArgs = null;
+const DateCtor = nativeMethods.date;
 
-    if (command.options && 'offsetX' in command.options && 'offsetY' in command.options)
-        ensureOffsetOptions(elements[0], command.options);
+class ActionExecutor {
+    constructor (command, globalSelectorTimeout, statusBar, testSpeed) {
+        this.command                = command;
+        this.globalSelectorTimeout  = globalSelectorTimeout;
+        this.statusBar              = statusBar;
+        this.testSpeed              = testSpeed;
 
-    switch (command.type) {
-        case COMMAND_TYPE.click :
-            if (/option|optgroup/.test(domUtils.getTagName(elements[0])))
-                return new SelectChildClickAutomation(elements[0], command.options);
+        this.targetElement           = null;
+        this.elements                = [];
+        this.ensureElementsPromise   = null;
+        this.ensureElementsStartTime = null;
 
-            return new ClickAutomation(elements[0], command.options);
-
-        case COMMAND_TYPE.rightClick :
-            return new RClickAutomation(elements[0], command.options);
-
-        case COMMAND_TYPE.doubleClick :
-            return new DblClickAutomation(elements[0], command.options);
-
-        case COMMAND_TYPE.hover :
-            return new HoverAutomation(elements[0], command.options);
-
-        case COMMAND_TYPE.drag :
-            return new DragToOffsetAutomation(elements[0], command.dragOffsetX, command.dragOffsetY, command.options);
-
-        case COMMAND_TYPE.dragToElement :
-            return new DragToElementAutomation(elements[0], elements[1], command.options);
-
-        case COMMAND_TYPE.typeText:
-            return new TypeAutomation(elements[0], command.text, command.options);
-
-        case COMMAND_TYPE.selectText:
-        case COMMAND_TYPE.selectTextAreaContent:
-            selectArgs = calculateSelectTextArguments(elements[0], command);
-
-            return new SelectTextAutomation(elements[0], selectArgs.startPos, selectArgs.endPos, command.options);
-
-        case COMMAND_TYPE.selectEditableContent:
-            return new SelectEditableContentAutomation(elements[0], elements[1], command.options);
-
-        case COMMAND_TYPE.pressKey:
-            return new PressAutomation(parseKeySequence(command.keys).combinations, command.options);
-
-        case COMMAND_TYPE.setFilesToUpload :
-            return new UploadAutomation(elements[0], command.filePath,
-                filePaths => new ActionCanNotFindFileToUploadError(filePaths)
-            );
-
-        case COMMAND_TYPE.clearUpload :
-            return new UploadAutomation(elements[0]);
+        this.executionStartTime      = null;
+        this.executionStartedHandler = null;
+        this.commandSelectorTimeout  = null;
     }
 
-    return null;
-}
+    _getSpecificTimeout () {
+        const hasSpecificTimeout = this.command.selector && typeof this.command.selector.timeout === 'number';
 
+        return hasSpecificTimeout ? this.command.selector.timeout : this.globalSelectorTimeout;
+    }
 
-// Execute action
-export default function executeAction (command, globalSelectorTimeout, statusBar, testSpeed) {
-    var resolveStartPromise = null;
-
-    var startPromise = new Promise(resolve => {
-        resolveStartPromise = resolve;
-    });
-
-    if (command.options && !command.options.speed)
-        command.options.speed = testSpeed;
-
-    var delayAfterAction = () => {
-        if (!command.options || command.options.speed === 1)
+    _delayAfterExecution () {
+        if (!this.command.options || this.command.options.speed === 1)
             return Promise.resolve();
 
-        return delay((1 - command.options.speed) * MAX_DELAY_AFTER_STEP);
-    };
+        return delay((1 - this.command.options.speed) * MAX_DELAY_AFTER_EXECUTION);
+    }
 
-    var completionPromise = new Promise(resolve => {
-        var startTime = new Date();
+    _isExecutionTimeoutExpired () {
+        return nativeMethods.dateNow() - this.executionStartTime >= this.commandSelectorTimeout;
+    }
 
-        try {
-            ensureCommandArguments(command);
+    _ensureCommandArguments () {
+        if (this.command.type === COMMAND_TYPE.pressKey) {
+            const parsedKeySequence = parseKeySequence(this.command.keys);
+
+            if (parsedKeySequence.error)
+                throw new ActionIncorrectKeysError('keys');
         }
-        catch (err) {
-            resolve(new DriverStatus({ isCommandResult: true, executionError: err }));
-            return;
+    }
+
+    _ensureCommandElements () {
+        const elementDescriptors = [];
+
+        if (this.command.selector)
+            elementDescriptors.push(createElementDescriptor(this.command.selector));
+
+        if (this.command.type === COMMAND_TYPE.dragToElement)
+            elementDescriptors.push(createAdditionalElementDescriptor(this.command.destinationSelector, 'destinationSelector'));
+        else if (this.command.type === COMMAND_TYPE.selectEditableContent) {
+            elementDescriptors.push(createAdditionalElementDescriptor(this.command.startSelector, 'startSelector'));
+            elementDescriptors.push(createAdditionalElementDescriptor(this.command.endSelector || this.command.startSelector, 'endSelector'));
+        }
+        else if (this.command.type === COMMAND_TYPE.dispatchEvent && this.command.relatedTarget)
+            elementDescriptors.push(createAdditionalElementDescriptor(this.command.relatedTarget, 'relatedTarget'));
+
+        return ensureElements(elementDescriptors, this.globalSelectorTimeout)
+            .then(elements => {
+                this.elements = elements;
+            });
+    }
+
+    _ensureCommandElementsProperties () {
+        if (this.command.type === COMMAND_TYPE.selectText)
+            ensureElementEditable(this.elements[0]);
+
+        else if (this.command.type === COMMAND_TYPE.selectTextAreaContent)
+            ensureTextAreaElement(this.elements[0]);
+
+        else if (this.command.type === COMMAND_TYPE.selectEditableContent) {
+            ensureContentEditableElement(this.elements[0], 'startSelector');
+            ensureContentEditableElement(this.elements[1], 'endSelector');
+            ensureRootContainer(this.elements);
         }
 
-        var requestBarrier         = new RequestBarrier();
-        var scriptExecutionBarrier = new ScriptExecutionBarrier();
+        else if (this.command.type === COMMAND_TYPE.setFilesToUpload || this.command.type === COMMAND_TYPE.clearUpload)
+            ensureFileInput(this.elements[0]);
+    }
 
-        pageUnloadBarrier.watchForPageNavigationTriggers();
+    _ensureCommandOptions () {
+        if (this.elements.length && this.command.options && 'offsetX' in this.command.options && 'offsetY' in this.command.options)
+            ensureOffsetOptions(this.elements[0], this.command.options);
+    }
 
-        var hasSpecificTimeout     = command.selector && typeof command.selector.timeout === 'number';
-        var commandSelectorTimeout = hasSpecificTimeout ? command.selector.timeout : globalSelectorTimeout;
+    _createAutomation () {
+        let selectArgs = null;
 
-        function runRecursively (strictElementCheck) {
-            return ensureCommandElements(command, globalSelectorTimeout)
-                .then(elements => {
-                    var automation = createAutomation(elements, command);
+        switch (this.command.type) {
+            case COMMAND_TYPE.dispatchEvent:
+                if (this.elements[1])
+                    this.command.options.relatedTarget = this.elements[1];
 
-                    if (automation.TARGET_ELEMENT_FOUND_EVENT) {
-                        automation.on(automation.TARGET_ELEMENT_FOUND_EVENT, () => {
-                            statusBar.hideWaitingElementStatus(true);
-                            resolveStartPromise();
-                        });
-                    }
-                    else {
-                        statusBar.hideWaitingElementStatus(true);
-                        resolveStartPromise();
-                    }
+                return new DispatchEventAutomation(this.elements[0], this.command.eventName, this.command.options);
+            case COMMAND_TYPE.click :
+                if (/option|optgroup/.test(domUtils.getTagName(this.elements[0])))
+                    return new SelectChildClickAutomation(this.elements[0], this.command.options);
 
-                    return automation.run(strictElementCheck);
+                return new ClickAutomation(this.elements[0], this.command.options);
+
+            case COMMAND_TYPE.rightClick :
+                return new RClickAutomation(this.elements[0], this.command.options);
+
+            case COMMAND_TYPE.doubleClick :
+                return new DblClickAutomation(this.elements[0], this.command.options);
+
+            case COMMAND_TYPE.hover :
+                return new HoverAutomation(this.elements[0], this.command.options);
+
+            case COMMAND_TYPE.drag :
+                return new DragToOffsetAutomation(this.elements[0], this.command.dragOffsetX, this.command.dragOffsetY, this.command.options);
+
+            case COMMAND_TYPE.dragToElement :
+                return new DragToElementAutomation(this.elements[0], this.elements[1], this.command.options);
+
+            case COMMAND_TYPE.scroll: {
+                const { x, y, position, options } = this.command;
+
+                return new SetScrollAutomation(this.elements[0], { x, y, position }, options);
+            }
+
+            case COMMAND_TYPE.scrollBy: {
+                const { byX, byY, options } = this.command;
+
+                return new SetScrollAutomation(this.elements[0], { byX, byY }, options);
+            }
+
+            case COMMAND_TYPE.scrollIntoView: {
+                return new ScrollIntoViewAutomation(this.elements[0], this.command.options);
+            }
+
+            case COMMAND_TYPE.typeText:
+                // eslint-disable-next-line no-restricted-properties
+                return new TypeAutomation(this.elements[0], this.command.text, this.command.options);
+
+            case COMMAND_TYPE.selectText:
+            case COMMAND_TYPE.selectTextAreaContent:
+                selectArgs = calculateSelectTextArguments(this.elements[0], this.command);
+
+                return new SelectTextAutomation(this.elements[0], selectArgs.startPos, selectArgs.endPos, this.command.options);
+
+            case COMMAND_TYPE.selectEditableContent:
+                return new SelectEditableContentAutomation(this.elements[0], this.elements[1], this.command.options);
+
+            case COMMAND_TYPE.pressKey:
+                return new PressAutomation(parseKeySequence(this.command.keys).combinations, this.command.options);
+
+            case COMMAND_TYPE.setFilesToUpload :
+                return new UploadAutomation(this.elements[0], this.command.filePath,
+                    (filePaths, scannedFilePaths) => new ActionCannotFindFileToUploadError(filePaths, scannedFilePaths)
+                );
+
+            case COMMAND_TYPE.clearUpload :
+                return new UploadAutomation(this.elements[0]);
+        }
+
+        return null;
+    }
+
+    _runAction (strictElementCheck) {
+        return this
+            ._ensureCommandElements()
+            .then(() => this._ensureCommandElementsProperties())
+            .then(() => {
+                this._ensureCommandOptions();
+
+                const automation = this._createAutomation();
+
+                if (automation.TARGET_ELEMENT_FOUND_EVENT) {
+                    automation.on(automation.TARGET_ELEMENT_FOUND_EVENT, e => {
+                        this.targetElement = e.element;
+
+                        this.statusBar.hideWaitingElementStatus(true);
+                        this.executionStartedHandler();
+                    });
+                }
+                else {
+                    this.statusBar.hideWaitingElementStatus(true);
+                    this.executionStartedHandler();
+                }
+
+                return automation
+                    .run(strictElementCheck);
+            });
+    }
+
+    _runRecursively () {
+        let actionFinished     = false;
+        let strictElementCheck = true;
+
+        return promiseUtils.whilst(() => !actionFinished, () => {
+            return this
+                ._runAction(strictElementCheck)
+                .then(() => {
+                    actionFinished = true;
                 })
                 .catch(err => {
-                    var timeoutExpired = Date.now() - startTime >= commandSelectorTimeout;
-
-                    if (timeoutExpired) {
+                    if (this._isExecutionTimeoutExpired()) {
                         if (err.message === AUTOMATION_ERROR_TYPES.foundElementIsNotTarget) {
                             // If we can't get a target element via elementFromPoint but it's
                             // visible we click on the point where the element is located.
-                            return runRecursively(false);
+                            strictElementCheck = false;
+
+                            return Promise.resolve();
                         }
 
                         throw err.message === AUTOMATION_ERROR_TYPES.elementIsInvisibleError ?
-                              new ActionElementIsInvisibleError() : err;
+                            new ActionElementIsInvisibleError() : err;
                     }
 
-                    return delay(CHECK_ELEMENT_IN_AUTOMATIONS_INTERVAL).then(() => runRecursively(true));
+                    return delay(CHECK_ELEMENT_IN_AUTOMATIONS_INTERVAL);
                 });
-        }
+        });
+    }
 
-        statusBar.showWaitingElementStatus(commandSelectorTimeout);
+    execute () {
+        if (this.command.options && !this.command.options.speed)
+            this.command.options.speed = this.testSpeed;
 
-        runRecursively(true)
-            .then(() => {
-                return Promise.all([
-                    delayAfterAction(),
+        const startPromise = new Promise(resolve => {
+            this.executionStartedHandler = resolve;
+        });
 
-                    // NOTE: script can be added by xhr-request, so we should run
-                    // script execution barrier waiting after request barrier resolved
-                    requestBarrier
-                        .wait()
-                        .then(() => scriptExecutionBarrier.wait()),
+        const completionPromise = new Promise(resolve => {
+            this.executionStartTime = new DateCtor();
 
-                    pageUnloadBarrier.wait()
-                ]);
-            })
-            .then(() => resolve(new DriverStatus({ isCommandResult: true })))
-            .catch(err => {
-                return statusBar.hideWaitingElementStatus(false)
-                    .then(() => resolve(new DriverStatus({ isCommandResult: true, executionError: err })));
-            });
-    });
+            try {
+                this._ensureCommandArguments();
+            }
+            catch (err) {
+                resolve(new DriverStatus({ isCommandResult: true, executionError: err }));
+                return;
+            }
 
-    return { startPromise, completionPromise };
+            this.commandSelectorTimeout = this._getSpecificTimeout();
+
+            this.statusBar.showWaitingElementStatus(this.commandSelectorTimeout);
+
+            const { actionPromise, barriersPromise } = runWithBarriers(() => this._runRecursively());
+
+            actionPromise
+                .then(() => Promise.all([
+                    this._delayAfterExecution(),
+                    barriersPromise
+                ]))
+                .then(() => {
+                    const status   = { isCommandResult: true };
+                    const elements = [...this.elements];
+
+                    if (this.targetElement)
+                        elements[0] = this.targetElement;
+
+                    status.result = createReplicator(new SelectorElementActionTransform()).encode(elements);
+
+                    resolve(new DriverStatus(status));
+                })
+                .catch(err => {
+                    return this.statusBar.hideWaitingElementStatus(false)
+                        .then(() => resolve(new DriverStatus({ isCommandResult: true, executionError: err })));
+                });
+        });
+
+        return { startPromise, completionPromise };
+    }
+}
+
+export default function executeAction (command, globalSelectorTimeout, statusBar, testSpeed) {
+    const actionExecutor = new ActionExecutor(command, globalSelectorTimeout, statusBar, testSpeed);
+
+    return actionExecutor.execute();
 }

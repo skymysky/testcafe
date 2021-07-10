@@ -1,19 +1,16 @@
-var shadowUI = window.getTestCafeModule('hammerhead').shadowUI;
+const testCafeUIRoot = window.getTestCafeModule('testCafeUI').uiRoot;
 
-
-var shadowUIRoot  = null;
-var $rootDiv      = null;
-var $underRootDiv = null;
+let $rootDiv      = null;
+let $underRootDiv = null;
+let $iframe       = null;
 
 function getElementFromPointMethod (window) {
-    var testCafeAutomation = window.getTestCafeModule('testCafeAutomation');
+    const testCafeAutomation = window.getTestCafeModule('testCafeAutomation');
 
-    return testCafeAutomation.get('./get-element').fromPoint;
+    return testCafeAutomation.getElementFromPoint;
 }
 
 function createRoot () {
-    shadowUIRoot = shadowUI.getRoot();
-
     $rootDiv = $('<div></div>')
         .width(100)
         .height(100)
@@ -21,7 +18,7 @@ function createRoot () {
             zIndex:   2,
             position: 'absolute'
         })
-        .appendTo(shadowUIRoot);
+        .appendTo(testCafeUIRoot.element());
 }
 
 function createElementUnderRoot (parent, left, top) {
@@ -39,9 +36,9 @@ function createElementUnderRoot (parent, left, top) {
 }
 
 function createIFrame (onLoadHandler) {
-    var iframeSrc = window.QUnitGlobals.getResourceUrl('../../data/runner/iframe.html');
+    const iframeSrc = window.QUnitGlobals.getResourceUrl('../../data/runner/iframe.html');
 
-    var $iframe = $('<iframe/>')
+    $iframe = $('<iframe/>')
         .attr('src', iframeSrc)
         .css({
             width:  '600px',
@@ -50,27 +47,28 @@ function createIFrame (onLoadHandler) {
 
     $iframe.bind('load', onLoadHandler);
     $iframe.appendTo($('body'));
-
-    return $iframe;
 }
 
 QUnit.testDone(function () {
-    $(shadowUIRoot).remove();
+    testCafeUIRoot.remove();
     $underRootDiv.remove();
+
+    if ($iframe)
+        $iframe.remove();
 });
 
 $(document).ready(function () {
     asyncTest('Should ignore shadow ui elements', function () {
         createRoot();
 
-        var shadowUITop  = shadowUIRoot.offsetTop;
-        var shadowUILeft = shadowUIRoot.offsetLeft;
+        const shadowUITop  = testCafeUIRoot.element().offsetTop;
+        const shadowUILeft = testCafeUIRoot.element().offsetLeft;
 
         createElementUnderRoot(document.body, shadowUILeft, shadowUITop);
 
         getElementFromPointMethod(window).call(window, shadowUITop + 50, shadowUILeft + 50)
             .then(function (res) {
-                var element = res.element;
+                const element = res.element;
 
                 equal(element.id, 'div-id');
                 start();
@@ -82,8 +80,6 @@ $(document).ready(function () {
     });
 
     asyncTest('Should ignore shadow ui elements in iframe (gh-1029)', function () {
-        var $iframe = null;
-
         createRoot();
 
         $rootDiv.css({
@@ -92,8 +88,8 @@ $(document).ready(function () {
             height: '500px'
         });
 
-        var onLoadHandler = function () {
-            var iframeWindow = $iframe[0].contentWindow;
+        const onLoadHandler = function () {
+            const iframeWindow = $iframe[0].contentWindow;
 
             $iframe.unbind('load', onLoadHandler);
             createElementUnderRoot(iframeWindow.document.body, 0, 0);
@@ -101,9 +97,8 @@ $(document).ready(function () {
             window.setTimeout(function () {
                 getElementFromPointMethod(iframeWindow).call(iframeWindow, 50, 50)
                     .then(function (res) {
-                        var element = res.element;
+                        const element = res.element;
 
-                        $iframe.remove();
                         equal(element.id, 'div-id');
                         start();
                     })
@@ -114,6 +109,6 @@ $(document).ready(function () {
             });
         };
 
-        $iframe = createIFrame(onLoadHandler);
+        createIFrame(onLoadHandler);
     });
 });

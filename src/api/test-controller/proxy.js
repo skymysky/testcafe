@@ -2,16 +2,16 @@ import TestController from './';
 import { delegateAPI } from '../../utils/delegated-api';
 import testRunTracker from '../test-run-tracker';
 import { APIError } from '../../errors/runtime';
-import MESSAGE from '../../errors/runtime/message';
+import { RUNTIME_ERRORS } from '../../errors/types';
 
-var testControllerProxy = Object.create(null);
+const testControllerProxy = Object.create(null);
 
 delegateAPI(testControllerProxy, TestController.API_LIST, {
     getHandler (propName, accessor) {
-        var testRun = testRunTracker.resolveContextTestRun();
+        const testRun = testRunTracker.resolveContextTestRun();
 
         if (!testRun) {
-            var callsiteName = null;
+            let callsiteName = null;
 
             if (accessor === 'getter')
                 callsiteName = 'get';
@@ -20,7 +20,7 @@ delegateAPI(testControllerProxy, TestController.API_LIST, {
             else
                 callsiteName = propName;
 
-            throw new APIError(callsiteName, MESSAGE.testControllerProxyCantResolveTestRun);
+            throw new APIError(callsiteName, RUNTIME_ERRORS.testControllerProxyCannotResolveTestRun);
         }
 
         return testRun.controller;

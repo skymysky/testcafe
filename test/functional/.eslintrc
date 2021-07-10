@@ -1,6 +1,11 @@
 {
+  "plugins": [
+    "no-only-tests"
+  ],
   "rules": {
-    "max-nested-callbacks": [2, 6]
+    "max-nested-callbacks": [2, 6],
+    "no-only-tests/no-only-tests": 2,
+    "object-curly-newline": [2, { "ImportDeclaration":  { "minProperties": 4 } }]
   },
   "env": {
     "browser": true,

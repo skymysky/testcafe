@@ -1,5 +1,7 @@
 import { expect } from 'chai';
 import { ClientFunction } from 'testcafe';
+import { saveWindowState, restoreWindowState } from '../../../../../window-helpers';
+
 
 const getWindowDimensionsInfo = ClientFunction(() => {
     return {
@@ -14,24 +16,21 @@ const getWindowDimensionsInfo = ClientFunction(() => {
 
 const INITIAL_SIZE = 500;
 
-var originalDimensions = null;
-
-
 fixture `Maximize Window`
     .page `http://localhost:3000/fixtures/api/es-next/maximize-window/pages/index.html`
     .beforeEach(async t => {
-        originalDimensions = await getWindowDimensionsInfo();
+        await saveWindowState(t);
 
         await t.resizeWindow(INITIAL_SIZE, INITIAL_SIZE);
     })
     .afterEach(async t => {
-        await t.resizeWindow(originalDimensions.innerWidth, originalDimensions.innerHeight);
+        await restoreWindowState(t);
     });
 
 test('Maximize window', async t => {
     await t.maximizeWindow();
 
-    var dimensions = await getWindowDimensionsInfo();
+    const dimensions = await getWindowDimensionsInfo();
 
     expect(dimensions.outerWidth).to.be.at.least(dimensions.availableWidth);
     expect(dimensions.outerHeight).to.be.at.least(dimensions.availableHeight);

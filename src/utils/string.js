@@ -1,5 +1,10 @@
 import indentString from 'indent-string';
 
+const DEFAULT_CONCATENATED_VALUES = {
+    SEPARATOR:  ', ',
+    QUOTE_CHAR: '"'
+};
+
 function rtrim (str) {
     return str.replace(/\s+$/, '');
 }
@@ -9,8 +14,8 @@ export function removeTTYColors (str) {
 }
 
 export function wordWrap (str, indent, width) {
-    var curStr     = '';
-    var wrappedMsg = '';
+    let curStr     = '';
+    let wrappedMsg = '';
 
     if (removeTTYColors(str).length <= width - indent)
         return indentString(str, ' ', indent);
@@ -21,7 +26,7 @@ export function wordWrap (str, indent, width) {
         .filter(elm => !!elm);
 
     str.forEach(word => {
-        var newStr = curStr + word;
+        const newStr = curStr + word;
 
         if (removeTTYColors(newStr).length > width - indent) {
             wrappedMsg += `${rtrim(curStr)}\n`;
@@ -41,12 +46,12 @@ export function wordWrap (str, indent, width) {
 }
 
 export function splitQuotedText (str, splitChar, quotes = '"\'') {
-    var currentPart = '';
-    var parts       = [];
-    var quoteChar   = null;
+    let currentPart = '';
+    const parts       = [];
+    let quoteChar   = null;
 
-    for (var i = 0; i < str.length; i++) {
-        var currentChar = str[i];
+    for (let i = 0; i < str.length; i++) {
+        const currentChar = str[i];
 
         if (currentChar === splitChar) {
             if (quoteChar)
@@ -72,4 +77,42 @@ export function splitQuotedText (str, splitChar, quotes = '"\'') {
         parts.push(currentPart);
 
     return parts;
+}
+
+export function getPluralSuffix (array) {
+    return array.length > 1 ? 's' : '';
+}
+
+function getDisplayedItemText (item, quote) {
+    return `${quote}${item}${quote}`;
+}
+
+export function getConcatenatedValuesString (array, separator = DEFAULT_CONCATENATED_VALUES.SEPARATOR, quoteChar = DEFAULT_CONCATENATED_VALUES.QUOTE_CHAR) {
+    const clonedArray = [...array];
+
+    if (separator === '\n')
+        return clonedArray.map(item => getDisplayedItemText(item, quoteChar)).join(separator);
+
+    else if (clonedArray.length === 1)
+        return getDisplayedItemText(clonedArray[0], quoteChar);
+
+    else if (clonedArray.length === 2) {
+        const item1 = array[0];
+        const item2 = array[1];
+
+        return `${getDisplayedItemText(item1, quoteChar)} and ${getDisplayedItemText(item2, quoteChar)}`;
+    }
+
+    const lastItem        = clonedArray.pop();
+    const otherItemString = clonedArray.map(item => getDisplayedItemText(item, quoteChar)).join(separator);
+
+    return `${otherItemString}, and ${getDisplayedItemText(lastItem, quoteChar)}`;
+}
+
+export function getToBeInPastTense (array) {
+    return array.length > 1 ? 'were' : 'was';
+}
+
+export function createList (array, PREFIX = '- ', SEPARATOR = '\n') {
+    return array.map(option => PREFIX + option).join(SEPARATOR);
 }

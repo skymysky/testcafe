@@ -1,11 +1,14 @@
 // NOTE: to preserve callsites, add new tests AFTER the existing ones
 import { ClientFunction } from 'testcafe';
 import { expect } from 'chai';
-import { parse } from 'useragent';
 
-const getWindowWidth  = ClientFunction(() => window.innerWidth);
-const getWindowHeight = ClientFunction(() => window.innerHeight);
-const getUserAgent    = ClientFunction(() => navigator.userAgent.toString());
+import {
+    saveWindowState,
+    restoreWindowState,
+    getWindowHeight,
+    getWindowWidth
+} from '../../../../../window-helpers';
+
 
 const setWindowOnresizeHandler = ClientFunction(() => {
     window.onresize = function () {
@@ -20,34 +23,20 @@ const resetWindowOnresizeHandler = ClientFunction(() => {
 
 const iPhoneSize = { width: 480, height: 320 };
 
-var initialWindowSize = {};
-
-
 fixture `Resize the window`
     .page `http://localhost:3000/fixtures/api/es-next/resize-window/pages/index.html`
-    .beforeEach(async () => {
-        var ua       = await getUserAgent();
-        var parsedUA = parse(ua);
-
-        initialWindowSize[parsedUA.family] = {
-            width:  await getWindowWidth(),
-            height: await getWindowHeight()
-        };
+    .beforeEach(async t => {
+        await saveWindowState(t);
     })
     .afterEach(async t => {
-        var ua       = await getUserAgent();
-        var parsedUA = parse(ua);
-        var size     = initialWindowSize[parsedUA.family];
-
         await resetWindowOnresizeHandler();
 
-        await t
-            .resizeWindow(size.width, size.height);
+        await restoreWindowState(t);
     });
 
 test('Resize the window', async t => {
-    var newWidth  = 500;
-    var newHeight = 500;
+    const newWidth  = 500;
+    const newHeight = 500;
 
     await t.resizeWindow(newWidth, newHeight);
 
@@ -67,10 +56,13 @@ test('Resize the window to fit a device', async t => {
 });
 
 test('Resize the window to fit a device with portrait orientation', async t => {
-    await t.resizeWindowToFitDevice('iPhone', { portraitOrientation: true });
+    // NOTE: Firefox 74 cannot set its width less than ~450px in both the headless and non-headless modes.
+    const iPadSize = { width: 1024, height: 768 };
 
-    expect(await getWindowWidth()).equals(iPhoneSize.height);
-    expect(await getWindowHeight()).equals(iPhoneSize.width);
+    await t.resizeWindowToFitDevice('iPad', { portraitOrientation: true });
+
+    expect(await getWindowWidth()).equals(iPadSize.height);
+    expect(await getWindowHeight()).equals(iPadSize.width);
 });
 
 
@@ -91,8 +83,8 @@ test('Resize the window to fit a device leads to js-error', async t => {
 });
 
 test('Too big size', async t => {
-    var hugeWidth  = 100000;
-    var hugeHeight = 100000;
+    const hugeWidth  = 100000;
+    const hugeHeight = 100000;
 
     await t.resizeWindow(hugeWidth, hugeHeight);
 });

@@ -1,20 +1,19 @@
-var expect              = require('chai').expect;
-var Promise             = require('pinkie');
-var promisify           = require('../../lib/utils/promisify');
-var request             = require('request');
-var createTestCafe      = require('../../lib/');
-var COMMAND             = require('../../lib/browser/connection/command');
-var browserProviderPool = require('../../lib/browser/provider/pool');
+const { expect }              = require('chai');
+const { promisify }           = require('util');
+const request                 = require('request');
+const createTestCafe          = require('../../lib/');
+const COMMAND                 = require('../../lib/browser/connection/command');
+const browserProviderPool     = require('../../lib/browser/provider/pool');
+const BrowserConnectionStatus = require('../../lib/browser/connection/status');
 
-
-var promisedRequest = promisify(request);
+const promisedRequest = promisify(request);
 
 describe('Browser connection', function () {
-    var testCafe                  = null;
-    var connection                = null;
-    var origRemoteBrowserProvider = null;
+    let testCafe                  = null;
+    let connection                = null;
+    let origRemoteBrowserProvider = null;
 
-    var remoteBrowserProviderMock = {
+    const remoteBrowserProviderMock = {
         openBrowser: function () {
             return Promise.resolve();
         },
@@ -24,7 +23,6 @@ describe('Browser connection', function () {
         }
     };
 
-    // Fixture setup/teardown
     before(function () {
         this.timeout(20000);
 
@@ -47,8 +45,6 @@ describe('Browser connection', function () {
         return testCafe.close();
     });
 
-
-    // Test setup/teardown
     beforeEach(function () {
         return testCafe
             .createBrowserConnection()
@@ -62,16 +58,14 @@ describe('Browser connection', function () {
         connection.close();
     });
 
-
-    // Tests
     it('Should fire "ready" event and redirect to idle page once established', function () {
-        var eventFired = false;
+        let eventFired = false;
 
         connection.on('ready', function () {
             eventFired = true;
         });
 
-        var options = {
+        const options = {
             url:            connection.url,
             followRedirect: false,
             headers:        {
@@ -83,8 +77,8 @@ describe('Browser connection', function () {
         return promisedRequest(options)
             .then(function (res) {
                 expect(eventFired).to.be.true;
-                expect(connection.ready).to.be.true;
-                expect(connection.userAgent).eql('Chrome 41.0.2227 / Mac OS X 10.10.1');
+                expect(connection.status).eql(BrowserConnectionStatus.opened);
+                expect(connection.userAgent).eql('Chrome 41.0.2227.1 / macOS 10.10.1');
                 expect(res.statusCode).eql(302);
                 expect(res.headers['location']).eql(connection.idleUrl);
             });
@@ -105,12 +99,12 @@ describe('Browser connection', function () {
         connection.HEARTBEAT_TIMEOUT = 0;
 
         connection.on('error', function (error) {
-            expect(error.message).eql('The Chrome 41.0.2227 / Mac OS X 10.10.1 browser disconnected. This problem may ' +
-                                      'appear when a browser hangs or is closed, or due to network issues.');
+            expect(error.message).eql('The Chrome 41.0.2227.1 / macOS 10.10.1 browser disconnected. If you did not ' +
+                'close the browser yourself, browser performance or network issues may be at fault.');
             done();
         });
 
-        var options = {
+        const options = {
             url:            connection.url,
             followRedirect: false,
             headers:        {
@@ -126,7 +120,7 @@ describe('Browser connection', function () {
         function createBrowserJobMock (urls) {
             return {
                 popNextTestRunUrl: function () {
-                    var url = urls.shift();
+                    const url = urls.shift();
 
                     return url;
                 },
@@ -137,6 +131,10 @@ describe('Browser connection', function () {
 
                 once: function () {
                     // Do nothing =)
+                },
+
+                on: function () {
+                    // Do nothing
                 }
             };
         }
@@ -145,7 +143,7 @@ describe('Browser connection', function () {
         connection.addJob(createBrowserJobMock(['3']));
 
         function queryStatus () {
-            return promisedRequest(connection.statusUrl);
+            return promisedRequest(connection.statusDoneUrl);
         }
 
         return promisedRequest(connection.url)
@@ -172,7 +170,7 @@ describe('Browser connection', function () {
     });
 
     it('Should respond to the service queries with error if not ready', function () {
-        var testCases = [
+        let testCases = [
             connection.heartbeatUrl,
             connection.idleUrl,
             connection.statusUrl
@@ -186,6 +184,44 @@ describe('Browser connection', function () {
         });
 
         return Promise.all(testCases);
+    });
+
+    it('Should set meta information for User-Agent', () => {
+        let eventFired = false;
+
+        connection.on('ready', function () {
+            eventFired = true;
+        });
+
+        const options = {
+            url:            connection.url,
+            followRedirect: false,
+            headers:        {
+                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 ' +
+                              '(KHTML, like Gecko) Chrome/41.0.2227.1 Safari/537.36'
+            }
+        };
+
+        const prettyUserAgentWithMetaInfo = `Chrome 41.0.2227.1 / macOS 10.10.1 (meta-info)`;
+
+        connection.setProviderMetaInfo('meta-info', { appendToUserAgent: true });
+
+        return promisedRequest(options)
+            .then(() => {
+                expect(eventFired).to.be.true;
+
+                expect(connection.browserInfo.userAgentProviderMetaInfo).eql('');
+                expect(connection.browserInfo.parsedUserAgent.prettyUserAgent).eql(prettyUserAgentWithMetaInfo);
+                expect(connection.userAgent).eql(prettyUserAgentWithMetaInfo);
+
+                // NOTE:
+                // set meta info after connection was already established without changing pretty user agent
+                connection.setProviderMetaInfo('another meta-info');
+
+                expect(connection.browserInfo.userAgentProviderMetaInfo).eql('another meta-info');
+                expect(connection.browserInfo.parsedUserAgent.prettyUserAgent).eql(prettyUserAgentWithMetaInfo);
+                expect(connection.userAgent).eql(prettyUserAgentWithMetaInfo + ' (another meta-info)');
+            });
     });
 });
 

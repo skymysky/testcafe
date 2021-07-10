@@ -6,13 +6,16 @@ export default class DriverStatus extends Assignable {
     constructor (obj) {
         super(obj);
 
-        this.id              = generateId();
-        this.isCommandResult = false;
-        this.executionError  = null;
-        this.pageError       = null;
-        this.resent          = false;
-        this.result          = null;
-        this.consoleMessages = null;
+        this.id                                 = generateId();
+        this.isCommandResult                    = false;
+        this.executionError                     = null;
+        this.pageError                          = null;
+        this.resent                             = false;
+        this.result                             = null;
+        this.consoleMessages                    = null;
+        this.isPendingWindowSwitching           = false;
+        this.isFirstRequestAfterWindowSwitching = false;
+        this.debug                              = '';
 
         this._assignFrom(obj, true);
     }
@@ -23,7 +26,9 @@ export default class DriverStatus extends Assignable {
             { name: 'executionError' },
             { name: 'pageError' },
             { name: 'result' },
-            { name: 'consoleMessages' }
+            { name: 'consoleMessages' },
+            { name: 'isPendingWindowSwitching' },
+            { name: 'isFirstRequestAfterWindowSwitching' }
         ];
     }
 }
